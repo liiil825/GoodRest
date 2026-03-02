@@ -41,3 +41,7 @@ export async function snoozeReminder(minutes: number): Promise<void> {
 export async function isTimerPaused(): Promise<boolean> {
   return await invoke('is_timer_paused');
 }
+
+export async function getNextReminderSeconds(): Promise<number | null> {
+  return await invoke('get_next_reminder_seconds');
+}

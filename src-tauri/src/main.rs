@@ -6,7 +6,7 @@ fn main() {
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -19,10 +19,23 @@ mod timer;
 
 use timer::TimerState;
 
+fn get_current_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let timer_state = Arc::new(Mutex::new(TimerState::default()));
     let is_paused = Arc::new(AtomicBool::new(false));
+
+    // Initialize next_reminder_at
+    {
+        let mut state = timer_state.blocking_lock();
+        state.next_reminder_at = Some(get_current_timestamp() + state.interval_minutes * 60);
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -97,6 +110,7 @@ pub fn run() {
 
                     let state = timer_state_clone.lock().await;
                     let interval_minutes = state.interval_minutes;
+                    let _next_reminder_at = state.next_reminder_at;
                     drop(state);
 
                     elapsed_minutes += 1;
@@ -108,6 +122,10 @@ pub fn run() {
                     {
                         last_reminder_elapsed = elapsed_minutes;
                         let _ = app_handle.emit("show-reminder", ());
+
+                        // Update next reminder time after triggering
+                        let mut state = timer_state_clone.lock().await;
+                        state.next_reminder_at = Some(get_current_timestamp() + interval_minutes * 60);
                     }
                 }
             });
@@ -119,7 +137,8 @@ pub fn run() {
             get_interval,
             skip_reminder,
             snooze_reminder,
-            is_timer_paused
+            is_timer_paused,
+            get_next_reminder_seconds
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -137,6 +156,7 @@ async fn set_interval(
 ) -> Result<(), String> {
     let mut timer_state = state.lock().await;
     timer_state.interval_minutes = minutes;
+    timer_state.next_reminder_at = Some(get_current_timestamp() + minutes * 60);
     Ok(())
 }
 
@@ -147,16 +167,53 @@ async fn get_interval(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result
 }
 
 #[tauri::command]
-async fn skip_reminder(app: AppHandle) -> Result<(), String> {
+async fn get_next_reminder_seconds(
+    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+    is_paused: tauri::State<'_, Arc<AtomicBool>>,
+) -> Result<Option<u64>, String> {
+    if is_paused.load(Ordering::SeqCst) {
+        return Ok(None);
+    }
+
+    let timer_state = state.lock().await;
+    if let Some(next_reminder_at) = timer_state.next_reminder_at {
+        let current = get_current_timestamp();
+        if next_reminder_at > current {
+            Ok(Some(next_reminder_at - current))
+        } else {
+            Ok(Some(0))
+        }
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+async fn skip_reminder(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+) -> Result<(), String> {
     // Reset the timer by emitting a skipped event
     let _ = app.emit("reminder-skipped", ());
+
+    // Reset timer: set next reminder time
+    let mut timer_state = state.lock().await;
+    timer_state.next_reminder_at = Some(get_current_timestamp() + timer_state.interval_minutes * 60);
     Ok(())
 }
 
 #[tauri::command]
-async fn snooze_reminder(app: AppHandle, minutes: u64) -> Result<(), String> {
+async fn snooze_reminder(
+    app: AppHandle,
+    minutes: u64,
+    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+) -> Result<(), String> {
     // Emit snooze event with duration
     let _ = app.emit("reminder-snoozed", minutes);
+
+    // Reset timer: set next reminder time based on snooze duration
+    let mut timer_state = state.lock().await;
+    timer_state.next_reminder_at = Some(get_current_timestamp() + minutes * 60);
     Ok(())
 }
 
