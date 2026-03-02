@@ -9,19 +9,28 @@ interface SettingsProps {
 }
 
 function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: SettingsProps) {
-  const [workTime, setWorkTime] = useState(workMinutes);
-  const [restTime, setRestTime] = useState(restSeconds);
+  const [workMins, setWorkMins] = useState(0);
+  const [workSecs, setWorkSecs] = useState(0);
+  const [restMins, setRestMins] = useState(0);
+  const [restSecs, setRestSecs] = useState(0);
 
   useEffect(() => {
-    setWorkTime(workMinutes);
-    setRestTime(restSeconds);
+    setWorkMins(Math.floor(workMinutes));
+    setWorkSecs(Math.floor((workMinutes % 1) * 60));
+    setRestMins(Math.floor(restSeconds / 60));
+    setRestSecs(restSeconds % 60);
   }, [workMinutes, restSeconds, isOpen]);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
-    if (workTime > 0 && restTime > 0) {
-      onSave(workTime, restTime);
+    const totalWorkSeconds = workMins * 60 + workSecs;
+    const totalRestSeconds = restMins * 60 + restSecs;
+
+    if (totalWorkSeconds > 0 && totalRestSeconds > 0) {
+      // Convert to minutes for work (keep decimal for sub-minute precision)
+      const workMinutesDecimal = totalWorkSeconds / 60;
+      onSave(workMinutesDecimal, totalRestSeconds);
       onClose();
     }
   };
@@ -32,27 +41,63 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
         <h2 className="text-xl font-bold text-gray-800 mb-4">设置</h2>
 
         <div className="mb-4">
-          <label className="block text-sm text-gray-600 mb-1">工作时间（分钟）</label>
-          <input
-            type="number"
-            min="1"
-            max="120"
-            value={workTime}
-            onChange={(e) => setWorkTime(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <label className="block text-sm text-gray-600 mb-1">工作时间</label>
+          <div className="flex gap-2 items-center">
+            <div className="flex-1">
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={workMins}
+                onChange={(e) => setWorkMins(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="分钟"
+              />
+              <span className="text-xs text-gray-500">分钟</span>
+            </div>
+            <div className="flex-1">
+              <input
+                type="number"
+                min="0"
+                max="59"
+                value={workSecs}
+                onChange={(e) => setWorkSecs(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="秒"
+              />
+              <span className="text-xs text-gray-500">秒</span>
+            </div>
+          </div>
         </div>
 
         <div className="mb-6">
-          <label className="block text-sm text-gray-600 mb-1">休息时间（秒）</label>
-          <input
-            type="number"
-            min="5"
-            max="300"
-            value={restTime}
-            onChange={(e) => setRestTime(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <label className="block text-sm text-gray-600 mb-1">休息时间</label>
+          <div className="flex gap-2 items-center">
+            <div className="flex-1">
+              <input
+                type="number"
+                min="0"
+                max="60"
+                value={restMins}
+                onChange={(e) => setRestMins(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="分钟"
+              />
+              <span className="text-xs text-gray-500">分钟</span>
+            </div>
+            <div className="flex-1">
+              <input
+                type="number"
+                min="0"
+                max="59"
+                value={restSecs}
+                onChange={(e) => setRestSecs(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="秒"
+              />
+              <span className="text-xs text-gray-500">秒</span>
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-3 justify-end">

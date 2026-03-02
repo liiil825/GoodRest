@@ -34,7 +34,7 @@ pub fn run() {
     // Initialize next_reminder_at
     {
         let mut state = timer_state.blocking_lock();
-        state.next_reminder_at = Some(get_current_timestamp() + state.interval_minutes * 60);
+        state.next_reminder_at = Some(get_current_timestamp() + (state.interval_minutes * 60.0) as u64);
     }
 
     tauri::Builder::default()
@@ -143,7 +143,7 @@ pub fn run() {
                             } else {
                                 // Rest ended, switch back to work mode
                                 state.work_mode = WorkMode::Working;
-                                state.next_reminder_at = Some(get_current_timestamp() + interval_minutes * 60);
+                                state.next_reminder_at = Some(get_current_timestamp() + (interval_minutes * 60.0) as u64);
                                 let _ = app_handle.emit("rest-ended", ());
                             }
                         }
@@ -175,14 +175,14 @@ pub fn run() {
 
 #[tauri::command]
 async fn set_interval(
-    minutes: u64,
+    minutes: f64,
     state: tauri::State<'_, Arc<Mutex<TimerState>>>,
 ) -> Result<(), String> {
     let mut timer_state = state.lock().await;
     timer_state.interval_minutes = minutes;
     // Only update next reminder if in working mode
     if timer_state.work_mode == WorkMode::Working {
-        timer_state.next_reminder_at = Some(get_current_timestamp() + minutes * 60);
+        timer_state.next_reminder_at = Some(get_current_timestamp() + (minutes * 60.0) as u64);
     }
     Ok(())
 }
@@ -198,7 +198,7 @@ async fn set_rest_duration(
 }
 
 #[tauri::command]
-async fn get_interval(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<u64, String> {
+async fn get_interval(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<f64, String> {
     let timer_state = state.lock().await;
     Ok(timer_state.interval_minutes)
 }
@@ -251,7 +251,7 @@ async fn skip_reminder(
     // Reset timer: switch back to working mode
     let mut timer_state = state.lock().await;
     timer_state.work_mode = WorkMode::Working;
-    timer_state.next_reminder_at = Some(get_current_timestamp() + timer_state.interval_minutes * 60);
+    timer_state.next_reminder_at = Some(get_current_timestamp() + (timer_state.interval_minutes * 60.0) as u64);
     Ok(())
 }
 
