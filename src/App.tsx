@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useReminderStore } from './stores/reminderStore';
 import { useSettingsStore } from './stores/settingsStore';
-import { listenToEvent, skipReminder, snoozeReminder, getNextReminderSeconds } from './lib/tauriEvents';
-import { DEFAULT_REMINDER_MESSAGES, SNOOZE_OPTIONS } from './lib/constants';
+import { listenToEvent, skipReminder, snoozeReminder, getNextReminderSeconds, getWorkMode, setWorkInterval, setRestDuration, getInterval, getRestDuration } from './lib/tauriEvents';
+import { DEFAULT_REMINDER_MESSAGES, SNOOZE_OPTIONS, DEFAULT_INTERVAL_MINUTES, DEFAULT_REST_SECONDS } from './lib/constants';
 import ReminderWindow from './components/ReminderWindow';
+import Settings from './components/Settings';
 
 function formatRemainingTime(seconds: number | null): string {
   if (seconds === null) {
@@ -22,22 +23,39 @@ function formatRemainingTime(seconds: number | null): string {
 
 function App() {
   const { isShowing, showReminder, hideReminder } = useReminderStore();
-  const { isPaused, setIsPaused, nextReminderSeconds, setNextReminderSeconds } = useSettingsStore();
+  const { isPaused, setIsPaused, nextReminderSeconds, setNextReminderSeconds, workMode, setWorkMode } = useSettingsStore();
 
-  // Fetch remaining time periodically
+  const [showSettings, setShowSettings] = useState(false);
+  const [workMinutes, setWorkMinutes] = useState(DEFAULT_INTERVAL_MINUTES);
+  const [restSeconds, setRestSeconds] = useState(DEFAULT_REST_SECONDS);
+
+  // Fetch settings on mount
   useEffect(() => {
-    const fetchRemainingTime = async () => {
+    const fetchSettings = async () => {
+      const interval = await getInterval();
+      const rest = await getRestDuration();
+      setWorkMinutes(interval);
+      setRestSeconds(rest);
+    };
+    fetchSettings();
+  }, []);
+
+  // Fetch remaining time and work mode periodically
+  useEffect(() => {
+    const fetchData = async () => {
       const seconds = await getNextReminderSeconds();
+      const mode = await getWorkMode();
       setNextReminderSeconds(seconds);
+      setWorkMode(mode);
     };
 
     // Initial fetch
-    fetchRemainingTime();
+    fetchData();
 
     // Update every second
-    const interval = setInterval(fetchRemainingTime, 1000);
-    return () => clearInterval(interval);
-  }, [setNextReminderSeconds]);
+    const timer = setInterval(fetchData, 1000);
+    return () => clearInterval(timer);
+  }, [setNextReminderSeconds, setWorkMode]);
 
   useEffect(() => {
     // Listen for reminder events from Rust backend
@@ -49,9 +67,20 @@ function App() {
 
     const unlistenSkipped = listenToEvent('reminder-skipped', () => {
       hideReminder();
+      setWorkMode('working');
     });
 
     const unlistenSnoozed = listenToEvent('reminder-snoozed', () => {
+      hideReminder();
+      setWorkMode('working');
+    });
+
+    const unlistenWorkEnded = listenToEvent('work-ended', () => {
+      setWorkMode('resting');
+    });
+
+    const unlistenRestEnded = listenToEvent('rest-ended', () => {
+      setWorkMode('working');
       hideReminder();
     });
 
@@ -67,10 +96,12 @@ function App() {
       unlistenShow.then((fn: () => void) => fn());
       unlistenSkipped.then((fn: () => void) => fn());
       unlistenSnoozed.then((fn: () => void) => fn());
+      unlistenWorkEnded.then((fn: () => void) => fn());
+      unlistenRestEnded.then((fn: () => void) => fn());
       unlistenPaused.then((fn: () => void) => fn());
       unlistenResumed.then((fn: () => void) => fn());
     };
-  }, [showReminder, hideReminder, setIsPaused]);
+  }, [showReminder, hideReminder, setIsPaused, setWorkMode]);
 
   const handleSkip = async () => {
     await skipReminder();
@@ -82,11 +113,28 @@ function App() {
     hideReminder();
   };
 
+  const handleSaveSettings = async (workMins: number, restSecs: number) => {
+    await setWorkInterval(workMins);
+    await setRestDuration(restSecs);
+    setWorkMinutes(workMins);
+    setRestSeconds(restSecs);
+  };
+
+  // Show rest screen when in rest mode
+  const isResting = workMode === 'resting';
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
-      {isShowing ? (
+      <Settings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        workMinutes={workMinutes}
+        restSeconds={restSeconds}
+        onSave={handleSaveSettings}
+      />
+      {isResting || isShowing ? (
         <ReminderWindow
-          message={useReminderStore.getState().currentMessage}
+          message={useReminderStore.getState().currentMessage || '休息一下'}
           onSkip={handleSkip}
           onSnooze={handleSnooze}
           snoozeOptions={SNOOZE_OPTIONS}
@@ -102,18 +150,25 @@ function App() {
               <p
                 className={`text-lg font-medium ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}
               >
-                {isPaused ? '已暂停' : '运行中'}
+                {isPaused ? '已暂停' : '工作中'}
               </p>
             </div>
 
             <div className="mb-4">
-              <p className="text-sm text-gray-500">下次提醒</p>
+              <p className="text-sm text-gray-500">下次休息</p>
               <p className="text-lg font-medium text-gray-800">
                 {isPaused ? '已暂停' : formatRemainingTime(nextReminderSeconds)}
               </p>
             </div>
 
-            <div className="text-xs text-gray-400 mt-6">点击系统托盘图标可显示此窗口</div>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="mt-2 px-4 py-2 text-sm text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              设置
+            </button>
+
+            <div className="text-xs text-gray-400 mt-4">点击系统托盘图标可显示此窗口</div>
           </div>
         </div>
       )}

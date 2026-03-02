@@ -17,7 +17,7 @@ use tokio::time::interval;
 
 mod timer;
 
-use timer::TimerState;
+use timer::{TimerState, WorkMode};
 
 fn get_current_timestamp() -> u64 {
     SystemTime::now()
@@ -111,9 +111,7 @@ pub fn run() {
             let is_paused_clone = is_paused.clone();
 
             tauri::async_runtime::spawn(async move {
-                let mut ticker = interval(Duration::from_secs(60));
-                let mut elapsed_minutes: u64 = 0;
-                let mut last_reminder_elapsed: u64 = 0;
+                let mut ticker = interval(Duration::from_secs(1));
 
                 loop {
                     ticker.tick().await;
@@ -123,23 +121,32 @@ pub fn run() {
                     }
 
                     let state = timer_state_clone.lock().await;
+                    let _work_mode = state.work_mode;
+                    let next_reminder_at = state.next_reminder_at;
                     let interval_minutes = state.interval_minutes;
-                    let _next_reminder_at = state.next_reminder_at;
+                    let rest_duration_seconds = state.rest_duration_seconds;
                     drop(state);
 
-                    elapsed_minutes += 1;
+                    if let Some(target_time) = next_reminder_at {
+                        let current = get_current_timestamp();
+                        if current >= target_time {
+                            let mut state = timer_state_clone.lock().await;
 
-                    // Check if it's time for a reminder
-                    if elapsed_minutes > 0
-                        && elapsed_minutes.is_multiple_of(interval_minutes)
-                        && elapsed_minutes != last_reminder_elapsed
-                    {
-                        last_reminder_elapsed = elapsed_minutes;
-                        let _ = app_handle.emit("show-reminder", ());
+                            if state.work_mode == WorkMode::Working {
+                                // Work ended, switch to rest mode
+                                state.work_mode = WorkMode::Resting;
+                                state.next_reminder_at = Some(get_current_timestamp() + rest_duration_seconds);
+                                let _ = app_handle.emit("work-ended", ());
 
-                        // Update next reminder time after triggering
-                        let mut state = timer_state_clone.lock().await;
-                        state.next_reminder_at = Some(get_current_timestamp() + interval_minutes * 60);
+                                // Also emit show-reminder for backward compatibility
+                                let _ = app_handle.emit("show-reminder", ());
+                            } else {
+                                // Rest ended, switch back to work mode
+                                state.work_mode = WorkMode::Working;
+                                state.next_reminder_at = Some(get_current_timestamp() + interval_minutes * 60);
+                                let _ = app_handle.emit("rest-ended", ());
+                            }
+                        }
                     }
                 }
             });
@@ -149,6 +156,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             set_interval,
             get_interval,
+            set_rest_duration,
+            get_rest_duration,
+            get_work_mode,
             skip_reminder,
             snooze_reminder,
             is_timer_paused,
@@ -170,7 +180,20 @@ async fn set_interval(
 ) -> Result<(), String> {
     let mut timer_state = state.lock().await;
     timer_state.interval_minutes = minutes;
-    timer_state.next_reminder_at = Some(get_current_timestamp() + minutes * 60);
+    // Only update next reminder if in working mode
+    if timer_state.work_mode == WorkMode::Working {
+        timer_state.next_reminder_at = Some(get_current_timestamp() + minutes * 60);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_rest_duration(
+    seconds: u64,
+    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+) -> Result<(), String> {
+    let mut timer_state = state.lock().await;
+    timer_state.rest_duration_seconds = seconds;
     Ok(())
 }
 
@@ -178,6 +201,12 @@ async fn set_interval(
 async fn get_interval(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<u64, String> {
     let timer_state = state.lock().await;
     Ok(timer_state.interval_minutes)
+}
+
+#[tauri::command]
+async fn get_rest_duration(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<u64, String> {
+    let timer_state = state.lock().await;
+    Ok(timer_state.rest_duration_seconds)
 }
 
 #[tauri::command]
@@ -203,6 +232,15 @@ async fn get_next_reminder_seconds(
 }
 
 #[tauri::command]
+async fn get_work_mode(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<String, String> {
+    let timer_state = state.lock().await;
+    match timer_state.work_mode {
+        WorkMode::Working => Ok("working".to_string()),
+        WorkMode::Resting => Ok("resting".to_string()),
+    }
+}
+
+#[tauri::command]
 async fn skip_reminder(
     app: AppHandle,
     state: tauri::State<'_, Arc<Mutex<TimerState>>>,
@@ -210,8 +248,9 @@ async fn skip_reminder(
     // Reset the timer by emitting a skipped event
     let _ = app.emit("reminder-skipped", ());
 
-    // Reset timer: set next reminder time
+    // Reset timer: switch back to working mode
     let mut timer_state = state.lock().await;
+    timer_state.work_mode = WorkMode::Working;
     timer_state.next_reminder_at = Some(get_current_timestamp() + timer_state.interval_minutes * 60);
     Ok(())
 }
@@ -225,8 +264,9 @@ async fn snooze_reminder(
     // Emit snooze event with duration
     let _ = app.emit("reminder-snoozed", minutes);
 
-    // Reset timer: set next reminder time based on snooze duration
+    // Reset timer: switch back to working mode
     let mut timer_state = state.lock().await;
+    timer_state.work_mode = WorkMode::Working;
     timer_state.next_reminder_at = Some(get_current_timestamp() + minutes * 60);
     Ok(())
 }

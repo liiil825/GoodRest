@@ -1,6 +1,9 @@
 // Default reminder interval in minutes
 export const DEFAULT_INTERVAL_MINUTES = 20;
 
+// Default rest duration in seconds (Pomodoro technique)
+export const DEFAULT_REST_SECONDS = 20;
+
 // Default reminder messages
 export const DEFAULT_REMINDER_MESSAGES = [
   '让眼睛休息一下',

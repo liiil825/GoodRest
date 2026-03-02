@@ -7,6 +7,8 @@ export interface TauriEvents {
   'reminder-snoozed': (minutes: number) => void;
   'timer-paused': () => void;
   'timer-resumed': () => void;
+  'work-ended': () => void;
+  'rest-ended': () => void;
 }
 
 export async function listenToEvent<K extends keyof TauriEvents>(
@@ -22,12 +24,20 @@ export async function listenToEvent<K extends keyof TauriEvents>(
   });
 }
 
-export async function setInterval(minutes: number): Promise<void> {
+export async function setWorkInterval(minutes: number): Promise<void> {
   await invoke('set_interval', { minutes });
 }
 
 export async function getInterval(): Promise<number> {
   return await invoke('get_interval');
+}
+
+export async function setRestDuration(seconds: number): Promise<void> {
+  await invoke('set_rest_duration', { seconds });
+}
+
+export async function getRestDuration(): Promise<number> {
+  return await invoke('get_rest_duration');
 }
 
 export async function skipReminder(): Promise<void> {
@@ -44,4 +54,9 @@ export async function isTimerPaused(): Promise<boolean> {
 
 export async function getNextReminderSeconds(): Promise<number | null> {
   return await invoke('get_next_reminder_seconds');
+}
+
+export async function getWorkMode(): Promise<'working' | 'resting'> {
+  const mode = await invoke<string>('get_work_mode');
+  return mode as 'working' | 'resting';
 }
