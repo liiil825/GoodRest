@@ -13,9 +13,3 @@ impl Default for TimerState {
         }
     }
 }
-
-impl TimerState {
-    pub fn new(interval_minutes: u64) -> Self {
-        Self { interval_minutes }
-    }
-}

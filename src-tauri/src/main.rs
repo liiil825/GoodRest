@@ -103,7 +103,7 @@ pub fn run() {
 
                     // Check if it's time for a reminder
                     if elapsed_minutes > 0
-                        && elapsed_minutes % interval_minutes == 0
+                        && elapsed_minutes.is_multiple_of(interval_minutes)
                         && elapsed_minutes != last_reminder_elapsed
                     {
                         last_reminder_elapsed = elapsed_minutes;
