@@ -8,7 +8,9 @@ pub struct TimerState {
 impl Default for TimerState {
     fn default() -> Self {
         // Default to 20 minutes (as per project requirements)
-        Self { interval_minutes: 20 }
+        Self {
+            interval_minutes: 20,
+        }
     }
 }
 

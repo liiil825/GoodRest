@@ -13,9 +13,7 @@ function ReminderWindow({ message, onSkip, onSnooze, snoozeOptions }: ReminderWi
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 flex flex-col items-center justify-center p-8">
       <div className="text-center">
-        <h2 className="text-5xl font-bold text-white mb-8 animate-pulse">
-          {message}
-        </h2>
+        <h2 className="text-5xl font-bold text-white mb-8 animate-pulse">{message}</h2>
 
         <div className="flex gap-4 justify-center flex-wrap">
           <button

@@ -12,9 +12,8 @@ function App() {
   useEffect(() => {
     // Listen for reminder events from Rust backend
     const unlistenShow = listenToEvent('show-reminder', () => {
-      const randomMessage = DEFAULT_REMINDER_MESSAGES[
-        Math.floor(Math.random() * DEFAULT_REMINDER_MESSAGES.length)
-      ];
+      const randomMessage =
+        DEFAULT_REMINDER_MESSAGES[Math.floor(Math.random() * DEFAULT_REMINDER_MESSAGES.length)];
       showReminder(randomMessage);
     });
 
@@ -70,7 +69,9 @@ function App() {
           <div className="bg-white rounded-lg shadow-md p-6 max-w-md mx-auto">
             <div className="mb-4">
               <p className="text-sm text-gray-500">状态</p>
-              <p className={`text-lg font-medium ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}>
+              <p
+                className={`text-lg font-medium ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}
+              >
                 {isPaused ? '已暂停' : '运行中'}
               </p>
             </div>
@@ -80,9 +81,7 @@ function App() {
               <p className="text-lg font-medium text-gray-800">20分钟后</p>
             </div>
 
-            <div className="text-xs text-gray-400 mt-6">
-              点击系统托盘图标可显示此窗口
-            </div>
+            <div className="text-xs text-gray-400 mt-6">点击系统托盘图标可显示此窗口</div>
           </div>
         </div>
       )}

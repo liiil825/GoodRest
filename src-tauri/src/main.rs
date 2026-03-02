@@ -141,9 +141,7 @@ async fn set_interval(
 }
 
 #[tauri::command]
-async fn get_interval(
-    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
-) -> Result<u64, String> {
+async fn get_interval(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<u64, String> {
     let timer_state = state.lock().await;
     Ok(timer_state.interval_minutes)
 }
@@ -163,8 +161,6 @@ async fn snooze_reminder(app: AppHandle, minutes: u64) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn is_timer_paused(
-    is_paused: tauri::State<'_, Arc<AtomicBool>>,
-) -> Result<bool, String> {
+async fn is_timer_paused(is_paused: tauri::State<'_, Arc<AtomicBool>>) -> Result<bool, String> {
     Ok(is_paused.load(Ordering::SeqCst))
 }

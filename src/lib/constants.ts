@@ -8,7 +8,7 @@ export const DEFAULT_REMINDER_MESSAGES = [
   '闭上眼睛放松一下',
   '轻轻的向左看，然后向右看',
   '让眼睛做个深呼吸',
-  '离开屏幕，伸展一下身体'
+  '离开屏幕，伸展一下身体',
 ];
 
 // Snooze duration options in minutes
