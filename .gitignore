@@ -1,0 +1,37 @@
+# Claude Code (local settings)
+.claude/
+
+# Node.js / pnpm
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Build outputs
+dist/
+.vite/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Tauri bundle (generated on build)
+src-tauri/bundle/
