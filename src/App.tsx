@@ -145,6 +145,7 @@ function App() {
           onSnooze={handleSnooze}
           snoozeOptions={SNOOZE_OPTIONS}
           countdown={nextReminderSeconds}
+          totalRestSeconds={restSeconds}
         />
       ) : (
         <div className="text-center">

@@ -1,20 +1,66 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface ReminderWindowProps {
   message: string;
   onSkip: () => void;
   onSnooze: (minutes: number) => void;
   snoozeOptions: number[];
+  countdown: number | null;
+  totalRestSeconds: number;
 }
 
-function ReminderWindow({ message, onSkip, onSnooze, snoozeOptions }: ReminderWindowProps) {
+function ReminderWindow({ message, onSkip, onSnooze, snoozeOptions, countdown, totalRestSeconds }: ReminderWindowProps) {
   const [showSnoozeOptions, setShowSnoozeOptions] = useState(false);
+  const [displayCountdown, setDisplayCountdown] = useState<number | null>(null);
+
+  // Calculate progress percentage
+  const progress = totalRestSeconds > 0 && countdown !== null
+    ? ((totalRestSeconds - countdown) / totalRestSeconds) * 100
+    : 0;
+
+  useEffect(() => {
+    setDisplayCountdown(countdown);
+  }, [countdown]);
+
+  useEffect(() => {
+    if (displayCountdown === null || displayCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setDisplayCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [displayCountdown]);
+
+  function formatCountdown(seconds: number | null): string {
+    if (seconds === null) return '--';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${secs}秒`;
+  }
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 flex flex-col items-center justify-center p-8">
-      <div className="text-center">
-        <h2 className="text-5xl font-bold text-white mb-8 animate-pulse">{message}</h2>
+    <div className="fixed inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 flex flex-col">
+      {/* Progress bar at top */}
+      <div className="w-full h-2 bg-white/20">
+        <div
+          className="h-full bg-white transition-all duration-1000 ease-linear"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
 
+      {/* Main content */}
+      <div className="flex-1 flex flex-col items-center justify-center p-8">
+        <h2 className="text-5xl font-bold text-white mb-4 animate-pulse">{message}</h2>
+
+        <p className="text-3xl font-semibold text-white/90">
+          休息倒计时: {formatCountdown(displayCountdown)}
+        </p>
+      </div>
+
+      {/* Buttons at bottom */}
+      <div className="p-8 flex flex-col items-center gap-4">
         <div className="flex gap-4 justify-center flex-wrap">
           <button
             onClick={() => setShowSnoozeOptions(!showSnoozeOptions)}
@@ -32,7 +78,7 @@ function ReminderWindow({ message, onSkip, onSnooze, snoozeOptions }: ReminderWi
         </div>
 
         {showSnoozeOptions && (
-          <div className="mt-6 flex gap-2 justify-center flex-wrap">
+          <div className="flex gap-2 justify-center flex-wrap">
             {snoozeOptions.map((minutes) => (
               <button
                 key={minutes}
