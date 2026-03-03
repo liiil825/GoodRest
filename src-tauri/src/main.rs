@@ -12,12 +12,28 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, RunEvent,
 };
+
 use tokio::sync::Mutex;
 use tokio::time::interval;
 
 mod timer;
 
 use timer::{TimerState, WorkMode};
+
+/// 强制窗口置顶并全屏的跨平台函数
+#[allow(unused_variables)]
+fn force_overlay(window: &tauri::WebviewWindow) {
+    // 基础 Tauri 置顶和全屏
+    let _ = window.set_always_on_top(true);
+    let _ = window.set_fullscreen(true);
+    let _ = window.set_decorations(false); // 必须去掉边框才能真正"覆盖"
+
+    // Windows 深度优化：取消任务栏占位
+    #[cfg(target_os = "windows")]
+    {
+        let _ = window.set_skip_taskbar(true);
+    }
+}
 
 fn get_current_timestamp() -> u64 {
     SystemTime::now()
@@ -136,6 +152,7 @@ pub fn run() {
                                 // Work ended, switch to rest mode
                                 state.work_mode = WorkMode::Resting;
                                 state.next_reminder_at = Some(get_current_timestamp() + rest_duration_seconds);
+                                println!("[Timer] Work ended, emitting work-ended event");
                                 let _ = app_handle.emit("work-ended", ());
 
                                 // Also emit show-reminder for backward compatibility
@@ -162,7 +179,9 @@ pub fn run() {
             skip_reminder,
             snooze_reminder,
             is_timer_paused,
-            get_next_reminder_seconds
+            get_next_reminder_seconds,
+            set_rest_mode,
+            set_work_mode
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -274,4 +293,62 @@ async fn snooze_reminder(
 #[tauri::command]
 async fn is_timer_paused(is_paused: tauri::State<'_, Arc<AtomicBool>>) -> Result<bool, String> {
     Ok(is_paused.load(Ordering::SeqCst))
+}
+
+#[tauri::command]
+async fn set_rest_mode(app_handle: AppHandle) -> Result<(), String> {
+    println!("[Rust] set_rest_mode called");
+
+    // Get the main window by label
+    let window = app_handle.get_webview_window("main")
+        .ok_or_else(|| "Failed to get main window".to_string())?;
+
+    // Show and focus the window first
+    window.show().map_err(|e| e.to_string())?;
+    println!("[Rust] window.show() complete");
+    window.unminimize().map_err(|e| e.to_string())?;
+    println!("[Rust] window.unminimize() complete");
+    window.set_focus().map_err(|e| e.to_string())?;
+    println!("[Rust] window.set_focus() complete");
+
+    // Force overlay - this handles fullscreen, always on top, decorations, and macOS window level
+    force_overlay(&window);
+    println!("[Rust] force_overlay complete");
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_work_mode(app_handle: AppHandle) -> Result<(), String> {
+    println!("[Rust] set_work_mode called");
+
+    // Get the main window by label
+    let window = app_handle.get_webview_window("main")
+        .ok_or_else(|| "Failed to get main window".to_string())?;
+
+    // Exit fullscreen first (must be done before unmaximize)
+    match window.set_fullscreen(false) {
+        Ok(_) => println!("[Rust] window.set_fullscreen(false) complete"),
+        Err(e) => println!("[Rust] window.set_fullscreen(false) failed: {}", e),
+    }
+
+    // Disable always on top
+    match window.set_always_on_top(false) {
+        Ok(_) => println!("[Rust] window.set_always_on_top(false) complete"),
+        Err(e) => println!("[Rust] window.set_always_on_top(false) failed: {}", e),
+    }
+
+    // Restore decorations (show window border)
+    match window.set_decorations(true) {
+        Ok(_) => println!("[Rust] window.set_decorations(true) complete"),
+        Err(e) => println!("[Rust] window.set_decorations(true) failed: {}", e),
+    }
+
+    // Unmaximize to restore normal window size
+    match window.unmaximize() {
+        Ok(_) => println!("[Rust] window.unmaximize() complete"),
+        Err(e) => println!("[Rust] window.unmaximize() failed: {}", e),
+    }
+
+    Ok(())
 }

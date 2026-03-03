@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useReminderStore } from './stores/reminderStore';
 import { useSettingsStore } from './stores/settingsStore';
-import { listenToEvent, skipReminder, snoozeReminder, getNextReminderSeconds, getWorkMode, setWorkInterval, setRestDuration, getInterval, getRestDuration } from './lib/tauriEvents';
+import { listenToEvent, skipReminder, snoozeReminder, getNextReminderSeconds, getWorkMode, setWorkInterval, setRestDuration, getInterval, getRestDuration, setRestMode, setWorkMode as setWindowWorkMode } from './lib/tauriEvents';
 import { DEFAULT_REMINDER_MESSAGES, SNOOZE_OPTIONS, DEFAULT_INTERVAL_MINUTES, DEFAULT_REST_SECONDS } from './lib/constants';
 import ReminderWindow from './components/ReminderWindow';
 import Settings from './components/Settings';
@@ -65,22 +65,28 @@ function App() {
       showReminder(randomMessage);
     });
 
-    const unlistenSkipped = listenToEvent('reminder-skipped', () => {
+    const unlistenSkipped = listenToEvent('reminder-skipped', async () => {
       hideReminder();
       setWorkMode('working');
+      await setWindowWorkMode();
     });
 
-    const unlistenSnoozed = listenToEvent('reminder-snoozed', () => {
+    const unlistenSnoozed = listenToEvent('reminder-snoozed', async () => {
       hideReminder();
       setWorkMode('working');
+      await setWindowWorkMode();
     });
 
-    const unlistenWorkEnded = listenToEvent('work-ended', () => {
+    const unlistenWorkEnded = listenToEvent('work-ended', async () => {
+      console.log('[App] work-ended event received, setting rest mode...');
       setWorkMode('resting');
+      await setRestMode();
+      console.log('[App] rest mode set complete');
     });
 
-    const unlistenRestEnded = listenToEvent('rest-ended', () => {
+    const unlistenRestEnded = listenToEvent('rest-ended', async () => {
       setWorkMode('working');
+      await setWindowWorkMode();
       hideReminder();
     });
 
@@ -138,6 +144,7 @@ function App() {
           onSkip={handleSkip}
           onSnooze={handleSnooze}
           snoozeOptions={SNOOZE_OPTIONS}
+          countdown={nextReminderSeconds}
         />
       ) : (
         <div className="text-center">

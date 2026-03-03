@@ -60,3 +60,15 @@ export async function getWorkMode(): Promise<'working' | 'resting'> {
   const mode = await invoke<string>('get_work_mode');
   return mode as 'working' | 'resting';
 }
+
+export async function setRestMode(): Promise<void> {
+  console.log('[tauriEvents] Calling set_rest_mode...');
+  await invoke('set_rest_mode');
+  console.log('[tauriEvents] set_rest_mode complete');
+}
+
+export async function setWorkMode(): Promise<void> {
+  console.log('[tauriEvents] Calling set_work_mode...');
+  await invoke('set_work_mode');
+  console.log('[tauriEvents] set_work_mode complete');
+}
