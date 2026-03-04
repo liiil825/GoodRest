@@ -3,28 +3,26 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { selectAudioFile } from '../lib/tauriEvents';
 
 interface SettingsProps {
-  isOpen: boolean;
-  onClose: () => void;
   workMinutes: number;
   restSeconds: number;
   onSave: (workMinutes: number, restSeconds: number, soundFilePath: string | null) => void;
 }
 
-function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: SettingsProps) {
+function Settings({ workMinutes, restSeconds, onSave }: SettingsProps) {
   const [workMins, setWorkMins] = useState(0);
   const [workSecs, setWorkSecs] = useState(0);
   const [restMins, setRestMins] = useState(0);
   const [restSecs, setRestSecs] = useState(0);
   const [soundFile, setSoundFile] = useState<string | null>(null);
 
-  const { notification, setNotification, soundEnabled, setSoundEnabled } = useSettingsStore();
+  const { notification, setNotification, soundEnabled, setSoundEnabled, setCurrentPage } = useSettingsStore();
 
   useEffect(() => {
     setWorkMins(Math.floor(workMinutes));
     setWorkSecs(Math.floor((workMinutes % 1) * 60));
     setRestMins(Math.floor(restSeconds / 60));
     setRestSecs(restSeconds % 60);
-  }, [workMinutes, restSeconds, isOpen]);
+  }, [workMinutes, restSeconds]);
 
   // Clear notification after 3 seconds
   useEffect(() => {
@@ -33,8 +31,6 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
       return () => clearTimeout(timer);
     }
   }, [notification, setNotification]);
-
-  if (!isOpen) return null;
 
   const handleSelectSound = async () => {
     const file = await selectAudioFile();
@@ -52,29 +48,37 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
       const workMinutesDecimal = totalWorkSeconds / 60;
       onSave(workMinutesDecimal, totalRestSeconds, soundFile);
       setNotification('设置已保存');
-      setTimeout(() => onClose(), 1000);
     }
   };
 
   const handleCancel = () => {
     setNotification('已取消');
-    onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-80">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">设置</h2>
+    <div className="min-h-screen bg-gray-100 p-6">
+      <div className="max-w-md mx-auto">
+        {/* Header with back button */}
+        <div className="flex items-center mb-6">
+          <button
+            onClick={() => setCurrentPage('home')}
+            className="text-gray-600 hover:text-gray-800"
+          >
+            ← 返回
+          </button>
+          <h2 className="text-xl font-bold text-gray-800 ml-4">设置</h2>
+        </div>
 
-        {/* Notification */}
-        {notification && (
-          <div className="mb-4 p-2 bg-green-100 text-green-700 rounded-lg text-center text-sm">
-            {notification}
-          </div>
-        )}
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          {/* Notification */}
+          {notification && (
+            <div className="mb-4 p-2 bg-green-100 text-green-700 rounded-lg text-center text-sm">
+              {notification}
+            </div>
+          )}
 
-        <div className="mb-4">
-          <label className="block text-sm text-gray-600 mb-1">工作时间</label>
+          <div className="mb-4">
+            <label className="block text-sm text-gray-600 mb-1">工作时间</label>
           <div className="flex gap-2 items-center">
             <div className="flex-1">
               <input
@@ -169,6 +173,7 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
           >
             保存
           </button>
+        </div>
         </div>
       </div>
     </div>

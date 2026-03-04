@@ -9,6 +9,7 @@ interface SettingsState {
   soundEnabled: boolean;
   soundFilePath: string | null;
   notification: string | null;
+  currentPage: 'home' | 'settings';
   setInterval: (minutes: number) => void;
   setIsPaused: (paused: boolean) => void;
   setNextReminderSeconds: (seconds: number | null) => void;
@@ -16,6 +17,7 @@ interface SettingsState {
   setSoundEnabled: (enabled: boolean) => void;
   setSoundFilePath: (path: string | null) => void;
   setNotification: (message: string | null) => void;
+  setCurrentPage: (page: 'home' | 'settings') => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -26,6 +28,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   soundEnabled: true,
   soundFilePath: null,
   notification: null,
+  currentPage: 'home',
   setInterval: (minutes: number) => set({ intervalMinutes: minutes }),
   setIsPaused: (paused: boolean) => set({ isPaused: paused }),
   setNextReminderSeconds: (seconds: number | null) => set({ nextReminderSeconds: seconds }),
@@ -33,4 +36,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSoundEnabled: (enabled: boolean) => set({ soundEnabled: enabled }),
   setSoundFilePath: (path: string | null) => set({ soundFilePath: path }),
   setNotification: (message: string | null) => set({ notification: message }),
+  setCurrentPage: (page) => set({ currentPage: page }),
 }));

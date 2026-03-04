@@ -41,7 +41,7 @@ function ReminderWindow({ message, onSkip, onSnooze, snoozeOptions, countdown, t
   }
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 flex flex-col">
+    <div className="fixed inset-0 bg-gradient-to-br from-green-400 to-emerald-600 flex flex-col">
       {/* Progress bar at top */}
       <div className="w-full h-2 bg-white/20">
         <div

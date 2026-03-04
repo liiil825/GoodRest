@@ -23,9 +23,7 @@ function formatRemainingTime(seconds: number | null): string {
 
 function App() {
   const { isShowing, showReminder, hideReminder } = useReminderStore();
-  const { isPaused, setIsPaused, nextReminderSeconds, setNextReminderSeconds, workMode, setWorkMode, soundEnabled, soundFilePath, setSoundFilePath } = useSettingsStore();
-
-  const [showSettings, setShowSettings] = useState(false);
+  const { isPaused, setIsPaused, nextReminderSeconds, setNextReminderSeconds, workMode, setWorkMode, soundEnabled, soundFilePath, setSoundFilePath, currentPage, setCurrentPage } = useSettingsStore();
   const [workMinutes, setWorkMinutes] = useState(DEFAULT_INTERVAL_MINUTES);
   const [restSeconds, setRestSeconds] = useState(DEFAULT_REST_SECONDS);
 
@@ -136,23 +134,14 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
-      <Settings
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        workMinutes={workMinutes}
-        restSeconds={restSeconds}
-        onSave={handleSaveSettings}
-      />
-      {isResting || isShowing ? (
-        <ReminderWindow
-          message={useReminderStore.getState().currentMessage || '休息一下'}
-          onSkip={handleSkip}
-          onSnooze={handleSnooze}
-          snoozeOptions={SNOOZE_OPTIONS}
-          countdown={nextReminderSeconds}
-          totalRestSeconds={restSeconds}
+      {currentPage === 'settings' ? (
+        <Settings
+          workMinutes={workMinutes}
+          restSeconds={restSeconds}
+          onSave={handleSaveSettings}
         />
       ) : (
+        /* Home page content */
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-800 mb-4">GoodRest</h1>
           <p className="text-gray-600 mb-8">让定时休息成为习惯</p>
@@ -175,7 +164,7 @@ function App() {
             </div>
 
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={() => setCurrentPage('settings')}
               className="mt-2 px-4 py-2 text-sm text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
             >
               设置
@@ -185,6 +174,16 @@ function App() {
           </div>
         </div>
       )}
+      {isResting || isShowing ? (
+        <ReminderWindow
+          message={useReminderStore.getState().currentMessage || '休息一下'}
+          onSkip={handleSkip}
+          onSnooze={handleSnooze}
+          snoozeOptions={SNOOZE_OPTIONS}
+          countdown={nextReminderSeconds}
+          totalRestSeconds={restSeconds}
+        />
+      ) : null}
     </div>
   );
 }
