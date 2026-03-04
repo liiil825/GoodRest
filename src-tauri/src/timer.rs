@@ -25,3 +25,36 @@ impl Default for TimerState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_timer_state_default() {
+        let state = TimerState::default();
+        assert_eq!(state.interval_minutes, 20.0);
+        assert_eq!(state.rest_duration_seconds, 20);
+        assert_eq!(state.work_mode, WorkMode::Working);
+        assert!(state.next_reminder_at.is_none());
+    }
+
+    #[test]
+    fn test_work_mode_working() {
+        let mode = WorkMode::Working;
+        assert!(matches!(mode, WorkMode::Working));
+    }
+
+    #[test]
+    fn test_work_mode_resting() {
+        let mode = WorkMode::Resting;
+        assert!(matches!(mode, WorkMode::Resting));
+    }
+
+    #[test]
+    fn test_work_mode_partial_eq() {
+        assert_eq!(WorkMode::Working, WorkMode::Working);
+        assert_eq!(WorkMode::Resting, WorkMode::Resting);
+        assert_ne!(WorkMode::Working, WorkMode::Resting);
+    }
+}
