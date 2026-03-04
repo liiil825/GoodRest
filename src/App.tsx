@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useReminderStore } from './stores/reminderStore';
 import { useSettingsStore } from './stores/settingsStore';
-import { listenToEvent, skipReminder, snoozeReminder, getNextReminderSeconds, getWorkMode, setWorkInterval, setRestDuration, getInterval, getRestDuration, setRestMode, setWorkMode as setWindowWorkMode } from './lib/tauriEvents';
+import { listenToEvent, skipReminder, snoozeReminder, getNextReminderSeconds, getWorkMode, setWorkInterval, setRestDuration, getInterval, getRestDuration, setRestMode, setWorkMode as setWindowWorkMode, playSound } from './lib/tauriEvents';
 import { DEFAULT_REMINDER_MESSAGES, SNOOZE_OPTIONS, DEFAULT_INTERVAL_MINUTES, DEFAULT_REST_SECONDS } from './lib/constants';
 import ReminderWindow from './components/ReminderWindow';
 import Settings from './components/Settings';
@@ -23,7 +23,7 @@ function formatRemainingTime(seconds: number | null): string {
 
 function App() {
   const { isShowing, showReminder, hideReminder } = useReminderStore();
-  const { isPaused, setIsPaused, nextReminderSeconds, setNextReminderSeconds, workMode, setWorkMode } = useSettingsStore();
+  const { isPaused, setIsPaused, nextReminderSeconds, setNextReminderSeconds, workMode, setWorkMode, soundEnabled, soundFilePath, setSoundFilePath } = useSettingsStore();
 
   const [showSettings, setShowSettings] = useState(false);
   const [workMinutes, setWorkMinutes] = useState(DEFAULT_INTERVAL_MINUTES);
@@ -88,6 +88,10 @@ function App() {
       setWorkMode('working');
       await setWindowWorkMode();
       hideReminder();
+      // Play sound when rest ends
+      if (soundEnabled && soundFilePath) {
+        await playSound(soundFilePath);
+      }
     });
 
     const unlistenPaused = listenToEvent('timer-paused', () => {
@@ -119,11 +123,12 @@ function App() {
     hideReminder();
   };
 
-  const handleSaveSettings = async (workMins: number, restSecs: number) => {
+  const handleSaveSettings = async (workMins: number, restSecs: number, soundFilePath: string | null) => {
     await setWorkInterval(workMins);
     await setRestDuration(restSecs);
     setWorkMinutes(workMins);
     setRestSeconds(restSecs);
+    setSoundFilePath(soundFilePath);
   };
 
   // Show rest screen when in rest mode

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useSettingsStore } from '../stores/settingsStore';
+import { selectAudioFile } from '../lib/tauriEvents';
 
 interface SettingsProps {
   isOpen: boolean;
   onClose: () => void;
   workMinutes: number;
   restSeconds: number;
-  onSave: (workMinutes: number, restSeconds: number) => void;
+  onSave: (workMinutes: number, restSeconds: number, soundFilePath: string | null) => void;
 }
 
 function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: SettingsProps) {
@@ -13,6 +15,9 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
   const [workSecs, setWorkSecs] = useState(0);
   const [restMins, setRestMins] = useState(0);
   const [restSecs, setRestSecs] = useState(0);
+  const [soundFile, setSoundFile] = useState<string | null>(null);
+
+  const { notification, setNotification, soundEnabled, setSoundEnabled } = useSettingsStore();
 
   useEffect(() => {
     setWorkMins(Math.floor(workMinutes));
@@ -21,7 +26,22 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
     setRestSecs(restSeconds % 60);
   }, [workMinutes, restSeconds, isOpen]);
 
+  // Clear notification after 3 seconds
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification, setNotification]);
+
   if (!isOpen) return null;
+
+  const handleSelectSound = async () => {
+    const file = await selectAudioFile();
+    if (file) {
+      setSoundFile(file);
+    }
+  };
 
   const handleSave = () => {
     const totalWorkSeconds = workMins * 60 + workSecs;
@@ -30,15 +50,28 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
     if (totalWorkSeconds > 0 && totalRestSeconds > 0) {
       // Convert to minutes for work (keep decimal for sub-minute precision)
       const workMinutesDecimal = totalWorkSeconds / 60;
-      onSave(workMinutesDecimal, totalRestSeconds);
-      onClose();
+      onSave(workMinutesDecimal, totalRestSeconds, soundFile);
+      setNotification('设置已保存');
+      setTimeout(() => onClose(), 1000);
     }
+  };
+
+  const handleCancel = () => {
+    setNotification('已取消');
+    onClose();
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl p-6 w-80">
         <h2 className="text-xl font-bold text-gray-800 mb-4">设置</h2>
+
+        {/* Notification */}
+        {notification && (
+          <div className="mb-4 p-2 bg-green-100 text-green-700 rounded-lg text-center text-sm">
+            {notification}
+          </div>
+        )}
 
         <div className="mb-4">
           <label className="block text-sm text-gray-600 mb-1">工作时间</label>
@@ -70,7 +103,7 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
           </div>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="block text-sm text-gray-600 mb-1">休息时间</label>
           <div className="flex gap-2 items-center">
             <div className="flex-1">
@@ -100,9 +133,32 @@ function Settings({ isOpen, onClose, workMinutes, restSeconds, onSave }: Setting
           </div>
         </div>
 
+        {/* Sound settings */}
+        <div className="mb-4">
+          <label className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(e) => setSoundEnabled(e.target.checked)}
+              className="w-4 h-4"
+            />
+            休息结束时播放声音
+          </label>
+          {soundEnabled && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleSelectSound}
+                className="flex-1 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors truncate"
+              >
+                {soundFile ? soundFile.split(/[\\/]/).pop() : '选择音频文件'}
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-3 justify-end">
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             取消

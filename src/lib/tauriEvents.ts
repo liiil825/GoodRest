@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 
 export interface TauriEvents {
   'show-reminder': () => void;
@@ -71,4 +73,28 @@ export async function setWorkMode(): Promise<void> {
   console.log('[tauriEvents] Calling set_work_mode...');
   await invoke('set_work_mode');
   console.log('[tauriEvents] set_work_mode complete');
+}
+
+/// Play a sound file (supports .mp3, .wav, .ogg)
+export async function playSound(filePath: string | null): Promise<void> {
+  if (!filePath) return;
+
+  try {
+    const audio = new Audio(convertFileSrc(filePath));
+    await audio.play();
+  } catch (error) {
+    console.error('[tauriEvents] Failed to play sound:', error);
+  }
+}
+
+/// Open file dialog to select an audio file
+export async function selectAudioFile(): Promise<string | null> {
+  const result = await open({
+    multiple: false,
+    filters: [{
+      name: 'Audio',
+      extensions: ['mp3', 'wav', 'ogg']
+    }]
+  });
+  return result as string | null;
 }
