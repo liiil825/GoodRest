@@ -43,6 +43,27 @@ fn get_current_timestamp() -> u64 {
         .as_secs()
 }
 
+/// Helper function to toggle window visibility
+fn toggle_window_visibility(window: &tauri::WebviewWindow) {
+    let is_visible = window.is_visible().unwrap_or(false);
+    let is_focused = window.is_focused().unwrap_or(false);
+    let is_minimized = window.is_minimized().unwrap_or(false);
+
+    if is_visible && is_focused && !is_minimized {
+        // If it's already visible and focused, minmize/hide it
+        let _ = window.hide();
+        #[cfg(target_os = "macos")]
+        let _ = window.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
+    } else {
+        // Otherwise, show and focus it
+        #[cfg(target_os = "macos")]
+        let _ = window.app_handle().set_activation_policy(tauri::ActivationPolicy::Regular);
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let timer_state = Arc::new(Mutex::new(TimerState::default()));
@@ -80,7 +101,10 @@ pub fn run() {
                     }
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
+                            #[cfg(target_os = "macos")]
+                            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                             let _ = window.show();
+                            let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
                     }
@@ -103,9 +127,7 @@ pub fn run() {
                     {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
+                            toggle_window_visibility(&window);
                         }
                     }
                 })
@@ -118,7 +140,9 @@ pub fn run() {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         if let Some(win) = app_handle.get_webview_window("main") {
-                            let _ = win.minimize();
+                            let _ = win.hide();
+                            #[cfg(target_os = "macos")]
+                            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
                         }
                     }
                 });
@@ -219,9 +243,18 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| {
-            if let RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
+        .run(|app_handle, event| {
+            match event {
+                RunEvent::ExitRequested { api, .. } => {
+                    api.prevent_exit();
+                }
+                RunEvent::Reopen { .. } => {
+                    // Handle macOS dock icon click
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        toggle_window_visibility(&window);
+                    }
+                }
+                _ => {}
             }
         });
 }
@@ -363,6 +396,10 @@ async fn set_rest_mode(app_handle: AppHandle) -> Result<(), String> {
     let window = app_handle.get_webview_window("main")
         .ok_or_else(|| "Failed to get main window".to_string())?;
 
+    // Make sure app behaves as normal foreground app with dock icon
+    #[cfg(target_os = "macos")]
+    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
+
     // Show and focus the window first
     window.show().map_err(|e| e.to_string())?;
     println!("[Rust] window.show() complete");
@@ -385,6 +422,10 @@ async fn set_work_mode(app_handle: AppHandle) -> Result<(), String> {
     // Get the main window by label
     let window = app_handle.get_webview_window("main")
         .ok_or_else(|| "Failed to get main window".to_string())?;
+
+    // Make sure app behaves as normal foreground app with dock icon
+    #[cfg(target_os = "macos")]
+    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
 
     // Exit fullscreen first (must be done before unmaximize)
     match window.set_fullscreen(false) {
