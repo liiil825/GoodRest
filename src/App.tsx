@@ -208,7 +208,7 @@ function App() {
   const totalTomatoes = bigTomatoCount * 4 + smallTomatoCount;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-50/50 via-emerald-50/30 to-zinc-100 flex flex-col items-center justify-center p-4 transition-colors duration-500">
       {currentPage === 'settings' ? (
         <Settings
           workMinutes={workMinutes}
@@ -219,59 +219,62 @@ function App() {
       ) : (
         /* Home page content */
         <div className="text-center w-full max-w-lg">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">GoodRest</h1>
-          <p className="text-gray-500 mb-8">让定时休息成为习惯</p>
+          <h1 className="text-4xl font-extrabold text-slate-800 tracking-tight mb-2 drop-shadow-sm">GoodRest</h1>
+          <p className="text-slate-500 font-medium tracking-wide mb-8">让定时休息成为习惯</p>
 
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 w-full">
+          <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] ring-1 ring-white/60 border border-white/40 p-10 w-full transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
             {/* Tomato progress */}
-            <div className="mb-6">
-              <p className="text-sm text-gray-500 mb-3">今日番茄</p>
+            <div className="mb-8">
+              <p className="text-xs uppercase tracking-widest font-semibold text-slate-400 mb-4">今日番茄</p>
               {totalTomatoes > 15 ? (
                 <div className="flex items-center justify-center gap-2">
                   <BigTomatoIcon size={40} />
                   <span className="text-2xl font-bold text-gray-800">x {totalTomatoes}</span>
                 </div>
               ) : (
-                <div className="flex items-center justify-center gap-1 flex-wrap">
+                <div className="flex items-center justify-center gap-1.5 flex-wrap">
                   {/* Big tomatoes */}
                   {Array.from({ length: bigTomatoCount }).map((_, i) => (
-                    <BigTomatoIcon key={`big-${i}`} size={40} />
+                    <div key={`big-${i}`} className="transform hover:scale-110 transition-transform duration-200"><BigTomatoIcon size={40} /></div>
                   ))}
                   {/* Small tomatoes */}
                   {Array.from({ length: smallTomatoCount }).map((_, i) => (
-                    <SmallTomatoIcon key={`small-${i}`} size={32} />
+                    <div key={`small-${i}`} className="transform hover:scale-110 transition-transform duration-200"><SmallTomatoIcon size={32} /></div>
                   ))}
                   {bigTomatoCount === 0 && smallTomatoCount === 0 && (
-                    <span className="text-gray-400 text-sm">暂无番茄，开始工作吧</span>
+                    <span className="text-slate-400 text-sm italic">暂无番茄，开始工作吧</span>
                   )}
                 </div>
               )}
             </div>
 
-            <div className="mb-4">
-              <p className="text-sm text-gray-500">状态</p>
-              <p
-                className={`text-xl font-semibold ${isPaused ? 'text-yellow-600' : workMode === 'working' ? 'text-green-600' : 'text-blue-600'}`}
-              >
-                {isPaused ? '已暂停' : workMode === 'working' ? '工作中' : workMode === 'big_resting' ? '大休息中' : '小休息中'}
-              </p>
+            <div className="mb-6">
+              <p className="text-xs uppercase tracking-widest font-semibold text-slate-400 mb-2">状态</p>
+              <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-white/50 ring-1 ring-slate-200/50 shadow-sm">
+                <div className={`w-2 h-2 rounded-full mr-2 ${isPaused ? 'bg-amber-400' : workMode === 'working' ? 'bg-emerald-500 animate-pulse' : 'bg-blue-400 animate-pulse'}`}></div>
+                <p
+                  className={`text-sm font-bold tracking-wide ${isPaused ? 'text-amber-600' : workMode === 'working' ? 'text-emerald-600' : 'text-blue-600'}`}
+                >
+                  {isPaused ? '已暂停' : workMode === 'working' ? '工作中' : workMode === 'big_resting' ? '大休息中' : '小休息中'}
+                </p>
+              </div>
             </div>
 
-            <div className="mb-6">
-              <p className="text-sm text-gray-500">下次休息</p>
-              <p className="text-2xl font-bold text-gray-800">
+            <div className="mb-10">
+              <p className="text-xs uppercase tracking-widest font-semibold text-slate-400 mb-2">下次休息</p>
+              <p className="text-5xl font-black bg-clip-text text-transparent bg-gradient-to-r from-teal-600 to-emerald-500 drop-shadow-sm tabular-nums tracking-tight">
                 {isPaused ? '已暂停' : formatRemainingTime(nextReminderSeconds)}
               </p>
             </div>
 
             <button
               onClick={() => setCurrentPage('settings')}
-              className="mt-2 px-6 py-2.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors"
+              className="mt-2 px-8 py-3 text-sm font-semibold bg-white/60 hover:bg-white border border-slate-200/60 text-slate-600 shadow-sm hover:shadow-md hover:text-slate-800 rounded-2xl transition-all duration-300 active:scale-95"
             >
-              设置
+              配置设置
             </button>
 
-            <div className="text-xs text-gray-400 mt-6">点击系统托盘图标可显示此窗口</div>
+            <div className="text-xs text-slate-400 mt-8 opacity-70">点击系统托盘图标可显示此窗口</div>
           </div>
         </div>
       )}
