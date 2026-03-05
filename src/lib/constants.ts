@@ -16,3 +16,6 @@ export const DEFAULT_REMINDER_MESSAGES = [
 
 // Snooze duration options in minutes
 export const SNOOZE_OPTIONS = [1, 3, 5, 10];
+
+// Default sound settings
+export const DEFAULT_SOUND_ENABLED = true;

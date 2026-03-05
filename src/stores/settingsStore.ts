@@ -8,6 +8,7 @@ interface SettingsState {
   workMode: 'working' | 'resting';
   soundEnabled: boolean;
   soundFilePath: string | null;
+  customAudioSet: boolean;
   notification: string | null;
   currentPage: 'home' | 'settings';
   setInterval: (minutes: number) => void;
@@ -16,6 +17,7 @@ interface SettingsState {
   setWorkMode: (mode: 'working' | 'resting') => void;
   setSoundEnabled: (enabled: boolean) => void;
   setSoundFilePath: (path: string | null) => void;
+  setCustomAudioSet: (value: boolean) => void;
   setNotification: (message: string | null) => void;
   setCurrentPage: (page: 'home' | 'settings') => void;
 }
@@ -27,6 +29,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   workMode: 'working',
   soundEnabled: true,
   soundFilePath: null,
+  customAudioSet: false,
   notification: null,
   currentPage: 'home',
   setInterval: (minutes: number) => set({ intervalMinutes: minutes }),
@@ -35,6 +38,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setWorkMode: (mode: 'working' | 'resting') => set({ workMode: mode }),
   setSoundEnabled: (enabled: boolean) => set({ soundEnabled: enabled }),
   setSoundFilePath: (path: string | null) => set({ soundFilePath: path }),
+  setCustomAudioSet: (value: boolean) => set({ customAudioSet: value }),
   setNotification: (message: string | null) => set({ notification: message }),
   setCurrentPage: (page) => set({ currentPage: page }),
 }));

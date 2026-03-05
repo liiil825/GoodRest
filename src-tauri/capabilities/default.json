@@ -18,6 +18,11 @@
     "core:window:allow-is-maximized",
     "core:event:default",
     "core:event:allow-emit",
-    "core:event:allow-listen"
+    "core:event:allow-listen",
+    "dialog:allow-open",
+    "fs:default",
+    "fs:allow-app-write-recursive",
+    "fs:allow-app-read-recursive",
+    "core:path:default"
   ]
 }

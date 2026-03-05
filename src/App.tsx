@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useReminderStore } from './stores/reminderStore';
 import { useSettingsStore } from './stores/settingsStore';
-import { listenToEvent, skipReminder, snoozeReminder, getNextReminderSeconds, getWorkMode, setWorkInterval, setRestDuration, getInterval, getRestDuration, setRestMode, setWorkMode as setWindowWorkMode, playSound } from './lib/tauriEvents';
+import { listenToEvent, skipReminder, snoozeReminder, getNextReminderSeconds, getWorkMode, setWorkInterval, setRestDuration, getInterval, getRestDuration, setRestMode, setWorkMode as setWindowWorkMode, playSound, checkCustomAudioExists } from './lib/tauriEvents';
 import { DEFAULT_REMINDER_MESSAGES, SNOOZE_OPTIONS, DEFAULT_INTERVAL_MINUTES, DEFAULT_REST_SECONDS } from './lib/constants';
 import ReminderWindow from './components/ReminderWindow';
 import Settings from './components/Settings';
@@ -23,7 +23,7 @@ function formatRemainingTime(seconds: number | null): string {
 
 function App() {
   const { isShowing, showReminder, hideReminder } = useReminderStore();
-  const { isPaused, setIsPaused, nextReminderSeconds, setNextReminderSeconds, workMode, setWorkMode, soundEnabled, soundFilePath, setSoundFilePath, currentPage, setCurrentPage } = useSettingsStore();
+  const { isPaused, setIsPaused, nextReminderSeconds, setNextReminderSeconds, workMode, setWorkMode, soundEnabled, customAudioSet, currentPage, setCurrentPage } = useSettingsStore();
   const [workMinutes, setWorkMinutes] = useState(DEFAULT_INTERVAL_MINUTES);
   const [restSeconds, setRestSeconds] = useState(DEFAULT_REST_SECONDS);
 
@@ -32,8 +32,10 @@ function App() {
     const fetchSettings = async () => {
       const interval = await getInterval();
       const rest = await getRestDuration();
+      const hasCustomAudio = await checkCustomAudioExists();
       setWorkMinutes(interval);
       setRestSeconds(rest);
+      useSettingsStore.getState().setCustomAudioSet(hasCustomAudio);
     };
     fetchSettings();
   }, []);
@@ -79,6 +81,10 @@ function App() {
       console.log('[App] work-ended event received, setting rest mode...');
       setWorkMode('resting');
       await setRestMode();
+      // Play sound when work ends (rest begins)
+      if (soundEnabled) {
+        await playSound(customAudioSet);
+      }
       console.log('[App] rest mode set complete');
     });
 
@@ -86,10 +92,6 @@ function App() {
       setWorkMode('working');
       await setWindowWorkMode();
       hideReminder();
-      // Play sound when rest ends
-      if (soundEnabled && soundFilePath) {
-        await playSound(soundFilePath);
-      }
     });
 
     const unlistenPaused = listenToEvent('timer-paused', () => {
@@ -121,12 +123,11 @@ function App() {
     hideReminder();
   };
 
-  const handleSaveSettings = async (workMins: number, restSecs: number, soundFilePath: string | null) => {
+  const handleSaveSettings = async (workMins: number, restSecs: number) => {
     await setWorkInterval(workMins);
     await setRestDuration(restSecs);
     setWorkMinutes(workMins);
     setRestSeconds(restSecs);
-    setSoundFilePath(soundFilePath);
   };
 
   // Show rest screen when in rest mode

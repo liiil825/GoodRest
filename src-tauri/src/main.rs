@@ -4,6 +4,7 @@ fn main() {
     run();
 }
 
+use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -57,6 +58,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(timer_state.clone())
         .manage(is_paused.clone())
         .setup(move |app| {
@@ -182,7 +184,9 @@ pub fn run() {
             is_timer_paused,
             get_next_reminder_seconds,
             set_rest_mode,
-            set_work_mode
+            set_work_mode,
+            get_audio_base64,
+            check_custom_audio_exists
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -352,4 +356,43 @@ async fn set_work_mode(app_handle: AppHandle) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Check if custom audio file exists
+#[tauri::command]
+async fn check_custom_audio_exists(app: AppHandle) -> Result<bool, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let audio_path = app_dir.join("audio").join("rest.mp3");
+    Ok(audio_path.exists())
+}
+
+/// Get audio file as base64 for frontend playback
+#[tauri::command]
+async fn get_audio_base64(app: AppHandle) -> Result<String, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let audio_path = app_dir.join("audio").join("rest.mp3");
+
+    if !audio_path.exists() {
+        return Err("Audio file not found".to_string());
+    }
+
+    let data = fs::read(&audio_path).map_err(|e| format!("Failed to read audio file: {}", e))?;
+
+    // Determine MIME type based on file extension
+    let mime_type = if audio_path.extension().and_then(|s| s.to_str()) == Some("wav") {
+        "audio/wav"
+    } else if audio_path.extension().and_then(|s| s.to_str()) == Some("ogg") {
+        "audio/ogg"
+    } else {
+        "audio/mpeg"
+    };
+
+    // Encode to base64
+    use std::io::Write;
+    let mut encoder = base64::write::EncoderStringWriter::new(&base64::engine::general_purpose::STANDARD);
+    encoder.write_all(&data).map_err(|e| format!("Base64 encode error: {}", e))?;
+    let base64_data = encoder.into_inner();
+
+    // Return data URL format
+    Ok(format!("data:{};base64,{}", mime_type, base64_data))
 }
