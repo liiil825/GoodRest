@@ -12,6 +12,7 @@ export interface TauriEvents {
   'timer-resumed': () => void;
   'work-ended': () => void;
   'rest-ended': () => void;
+  'big-rest-started': () => void;
 }
 
 export async function listenToEvent<K extends keyof TauriEvents>(
@@ -27,6 +28,8 @@ export async function listenToEvent<K extends keyof TauriEvents>(
   });
 }
 
+// ==================== Timer Commands ====================
+
 export async function setWorkInterval(minutes: number): Promise<void> {
   await invoke('set_interval', { minutes });
 }
@@ -41,6 +44,19 @@ export async function setRestDuration(seconds: number): Promise<void> {
 
 export async function getRestDuration(): Promise<number> {
   return await invoke('get_rest_duration');
+}
+
+export async function setBigTomatoRestDuration(seconds: number): Promise<void> {
+  await invoke('set_big_tomato_rest_duration', { seconds });
+}
+
+export async function getBigTomatoRestDuration(): Promise<number> {
+  return await invoke('get_big_tomato_rest_duration');
+}
+
+export async function getTomatoCounts(): Promise<{ small: number; big: number }> {
+  const result = await invoke<[number, number]>('get_tomato_counts');
+  return { small: result[0], big: result[1] };
 }
 
 export async function skipReminder(): Promise<void> {
@@ -59,9 +75,9 @@ export async function getNextReminderSeconds(): Promise<number | null> {
   return await invoke('get_next_reminder_seconds');
 }
 
-export async function getWorkMode(): Promise<'working' | 'resting'> {
+export async function getWorkMode(): Promise<'working' | 'resting' | 'big_resting'> {
   const mode = await invoke<string>('get_work_mode');
-  return mode as 'working' | 'resting';
+  return mode as 'working' | 'resting' | 'big_resting';
 }
 
 export async function setRestMode(): Promise<void> {
@@ -75,6 +91,10 @@ export async function setWorkMode(): Promise<void> {
   await invoke('set_work_mode');
   console.log('[tauriEvents] set_work_mode complete');
 }
+
+// ==================== Audio Commands ====================
+
+export type AudioType = 'work' | 'small_rest' | 'big_rest';
 
 /// Play a default notification sound using Web Audio API
 function playDefaultSound(): void {
@@ -114,7 +134,6 @@ export async function selectAudioFile(): Promise<string | null> {
   });
   console.log('[tauriEvents] Dialog result:', result, typeof result);
 
-  // Handle different return types from Tauri v2 dialog
   if (!result) {
     console.log('[tauriEvents] No file selected or dialog cancelled');
     return null;
@@ -144,17 +163,19 @@ export async function getAudioPath(): Promise<string | null> {
   }
 }
 
-/// Copy audio file to app data directory using frontend fs plugin
-export async function copyAudioFile(sourcePath: string): Promise<string | null> {
+/// Copy audio file to app data directory with specific filename
+export async function copyAudioFileByType(sourcePath: string, audioType: AudioType): Promise<string | null> {
   try {
-    console.log('[tauriEvents] copyAudioFile called with:', sourcePath);
+    console.log(`[tauriEvents] copyAudioFileByType called with: ${sourcePath}, type: ${audioType}`);
 
-    // Get app config directory (e.g., ~/Library/Application Support/GoodRest on macOS)
     const configDir = await appConfigDir();
     console.log('[tauriEvents] Config dir:', configDir);
 
     const audioDir = await join(configDir, 'audio');
-    const targetPath = await join(audioDir, 'rest.mp3');
+    const filename = audioType === 'work' ? 'work.mp3' :
+                    audioType === 'small_rest' ? 'small_rest.mp3' :
+                    'big_rest.mp3';
+    const targetPath = await join(audioDir, filename);
 
     console.log('[tauriEvents] Target audio dir:', audioDir);
     console.log('[tauriEvents] Target path:', targetPath);
@@ -174,7 +195,7 @@ export async function copyAudioFile(sourcePath: string): Promise<string | null> 
   }
 }
 
-/// Check if custom audio file exists using backend command
+/// Check if custom audio file exists using backend command (legacy)
 export async function checkCustomAudioExists(): Promise<boolean> {
   try {
     return await invoke<boolean>('check_custom_audio_exists');
@@ -183,7 +204,16 @@ export async function checkCustomAudioExists(): Promise<boolean> {
   }
 }
 
-/// Get audio file as base64 data URL from backend
+/// Check if custom audio file exists by type
+export async function checkAudioExists(audioType: AudioType): Promise<boolean> {
+  try {
+    return await invoke<boolean>('check_audio_exists', { audioType });
+  } catch {
+    return false;
+  }
+}
+
+/// Get audio file as base64 data URL from backend (legacy)
 export async function getAudioBase64(): Promise<string | null> {
   try {
     return await invoke<string>('get_audio_base64');
@@ -193,8 +223,18 @@ export async function getAudioBase64(): Promise<string | null> {
   }
 }
 
-/// Play sound with fixed path (supports .mp3, .wav, .ogg)
-export async function playSound(customAudio: boolean): Promise<void> {
+/// Get audio file as base64 by type
+export async function getAudioBase64ByType(audioType: AudioType): Promise<string | null> {
+  try {
+    return await invoke<string>('get_audio_base64_by_type', { audioType });
+  } catch (error) {
+    console.error(`[tauriEvents] Failed to get audio base64 for ${audioType}:`, error);
+    return null;
+  }
+}
+
+/// Play sound by type
+export async function playSoundByType(audioType: AudioType, customAudio: boolean): Promise<void> {
   // If custom audio is not set, play default sound
   if (!customAudio) {
     playDefaultSound();
@@ -202,10 +242,9 @@ export async function playSound(customAudio: boolean): Promise<void> {
   }
 
   try {
-    // Get audio as base64 data URL from backend
-    const audioDataUrl = await getAudioBase64();
+    const audioDataUrl = await getAudioBase64ByType(audioType);
     if (!audioDataUrl) {
-      console.log('[tauriEvents] No custom audio set, playing default sound');
+      console.log(`[tauriEvents] No custom audio set for ${audioType}, playing default sound`);
       playDefaultSound();
       return;
     }
@@ -215,8 +254,6 @@ export async function playSound(customAudio: boolean): Promise<void> {
       currentAudio.pause();
       currentAudio = null;
     }
-
-    console.log('[tauriEvents] Playing custom audio from base64 data');
 
     const audio = new Audio(audioDataUrl);
     currentAudio = audio;
@@ -230,7 +267,7 @@ export async function playSound(customAudio: boolean): Promise<void> {
     };
 
     audio.onerror = () => {
-      console.error('[tauriEvents] Failed to load audio file, playing default sound');
+      console.error('[tauriEvents] Audio error, playing default sound');
       currentAudio = null;
       playDefaultSound();
     };
@@ -240,6 +277,11 @@ export async function playSound(customAudio: boolean): Promise<void> {
     console.error('[tauriEvents] Failed to play sound:', error);
     playDefaultSound();
   }
+}
+
+/// Play sound with fixed path (legacy, for backward compatibility)
+export async function playSound(customAudio: boolean): Promise<void> {
+  await playSoundByType('small_rest', customAudio);
 }
 
 /// Play sound with callback when audio ends
@@ -253,7 +295,6 @@ export async function playSoundWithCallback(customAudio: boolean, onEnd: () => v
   }
 
   try {
-    // Get audio as base64 data URL from backend
     const audioDataUrl = await getAudioBase64();
     if (!audioDataUrl) {
       playDefaultSound();
