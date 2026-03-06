@@ -13,6 +13,8 @@ export interface TauriEvents {
   'work-ended': () => void;
   'rest-ended': () => void;
   'big-rest-started': () => void;
+  'open-settings': () => void;
+  'open-home': () => void;
 }
 
 export async function listenToEvent<K extends keyof TauriEvents>(
@@ -173,8 +175,8 @@ export async function copyAudioFileByType(sourcePath: string, audioType: AudioTy
 
     const audioDir = await join(configDir, 'audio');
     const filename = audioType === 'work' ? 'work.mp3' :
-                    audioType === 'small_rest' ? 'small_rest.mp3' :
-                    'big_rest.mp3';
+      audioType === 'small_rest' ? 'small_rest.mp3' :
+        'big_rest.mp3';
     const targetPath = await join(audioDir, filename);
 
     console.log('[tauriEvents] Target audio dir:', audioDir);

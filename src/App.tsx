@@ -168,6 +168,14 @@ function App() {
       setIsPaused(false);
     });
 
+    const unlistenOpenSettings = listenToEvent('open-settings', () => {
+      setCurrentPage('settings');
+    });
+
+    const unlistenOpenHome = listenToEvent('open-home', () => {
+      setCurrentPage('home');
+    });
+
     return () => {
       unlistenShow.then((fn: () => void) => fn());
       unlistenSkipped.then((fn: () => void) => fn());
@@ -177,8 +185,10 @@ function App() {
       unlistenRestEnded.then((fn: () => void) => fn());
       unlistenPaused.then((fn: () => void) => fn());
       unlistenResumed.then((fn: () => void) => fn());
+      unlistenOpenSettings.then((fn: () => void) => fn());
+      unlistenOpenHome.then((fn: () => void) => fn());
     };
-  }, [showReminder, hideReminder, setIsPaused, setWorkMode]);
+  }, [showReminder, hideReminder, setIsPaused, setWorkMode, setCurrentPage]);
 
   const handleSkip = async () => {
     await skipReminder();

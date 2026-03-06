@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, RunEvent,
 };
 
@@ -83,53 +83,99 @@ pub fn run() {
         .manage(timer_state.clone())
         .manage(is_paused.clone())
         .setup(move |app| {
+            // Create Dynamic Menu Items
+            let status_next_rest = MenuItem::with_id(app, "status_next_rest", "下次小憩 计算中...", false, None::<&str>)?;
+            let status_big_rest = MenuItem::with_id(app, "status_big_rest", "下次休息 计算中...", false, None::<&str>)?;
+            
+            let skip = MenuItem::with_id(app, "skip", "跳到下一次", true, None::<&str>)?;
+            let pause_resume = MenuItem::with_id(app, "pause_resume", "暂停休息", true, None::<&str>)?;
+            let reset = MenuItem::with_id(app, "reset", "重置休息", true, None::<&str>)?;
+            let show_main = MenuItem::with_id(app, "show_main", "显示主页", true, None::<&str>)?;
+            let prefs = MenuItem::with_id(app, "prefs", "偏好设置", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let show = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
-            let pause = MenuItem::with_id(app, "pause", "暂停提醒", true, None::<&str>)?;
-            let resume = MenuItem::with_id(app, "resume", "恢复提醒", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &pause, &resume, &quit])?;
+            
+            let sep1 = PredefinedMenuItem::separator(app)?;
+            let sep2 = PredefinedMenuItem::separator(app)?;
+            let sep3 = PredefinedMenuItem::separator(app)?;
+
+            let menu = Menu::with_items(app, &[
+                &status_next_rest,
+                &status_big_rest,
+                &sep1,
+                &skip,
+                &pause_resume,
+                &reset,
+                &sep2,
+                &show_main,
+                &prefs,
+                &sep3,
+                &quit
+            ])?;
 
             let is_paused_clone = is_paused.clone();
+            let timer_state_action = timer_state.clone();
+            let pause_item_clone = pause_resume.clone();
 
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(true)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "quit" => {
-                        app.exit(0);
+                        std::process::exit(0);
                     }
-                    "show" => {
+                    "show_main" => {
                         if let Some(window) = app.get_webview_window("main") {
                             #[cfg(target_os = "macos")]
                             let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                             let _ = window.show();
                             let _ = window.unminimize();
                             let _ = window.set_focus();
+                            let _ = app.emit("open-home", ());
                         }
                     }
-                    "pause" => {
-                        is_paused_clone.store(true, Ordering::SeqCst);
-                        let _ = app.emit("timer-paused", ());
+                    "prefs" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            #[cfg(target_os = "macos")]
+                            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                            let _ = app.emit("open-settings", ());
+                        }
                     }
-                    "resume" => {
-                        is_paused_clone.store(false, Ordering::SeqCst);
-                        let _ = app.emit("timer-resumed", ());
+                    "skip" => {
+                        // Reset timer and emit skipped event
+                        let mut state = timer_state_action.blocking_lock();
+                        state.work_mode = WorkMode::Working;
+                        state.next_reminder_at = Some(get_current_timestamp() + (state.interval_minutes * 60.0) as u64);
+                        drop(state);
+                        let _ = app.emit("reminder-skipped", ());
+                    }
+                    "pause_resume" => {
+                        let current = is_paused_clone.load(Ordering::SeqCst);
+                        is_paused_clone.store(!current, Ordering::SeqCst);
+                        
+                        if current { // Was paused, now resumed
+                            let _ = app.emit("timer-resumed", ());
+                            let _ = pause_item_clone.set_text("暂停休息");
+                        } else { // Was running, now paused
+                            let _ = app.emit("timer-paused", ());
+                            let _ = pause_item_clone.set_text("恢复休息");
+                        }
+                    }
+                    "reset" => {
+                        let mut state = timer_state_action.blocking_lock();
+                        // Reset to full interval
+                        state.next_reminder_at = Some(get_current_timestamp() + (state.interval_minutes * 60.0) as u64);
+                        drop(state);
                     }
                     _ => {}
                 })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            toggle_window_visibility(&window);
-                        }
-                    }
+                .on_tray_icon_event(|_tray, _event| {
+                    // Only toggle on MacOS when left click is NOT opening the menu directly 
+                    // But we used show_menu_on_left_click(true), so left click opens the tray menu.
+                    // We can still handle events like right clicks if needed, but menu handles left naturally.
                 })
                 .build(app)?;
 
@@ -152,27 +198,73 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let timer_state_clone = timer_state.clone();
             let is_paused_clone = is_paused.clone();
-
+            
+            // Clone menu items for the async task to update them
+            let mi_next_rest = status_next_rest.clone();
+            let mi_big_rest = status_big_rest.clone();
+            
             tauri::async_runtime::spawn(async move {
                 let mut ticker = interval(Duration::from_secs(1));
 
                 loop {
                     ticker.tick().await;
 
-                    if is_paused_clone.load(Ordering::SeqCst) {
-                        continue;
-                    }
-
+                    // Update System Tray UI Status Text
+                    let is_paused_now = is_paused_clone.load(Ordering::SeqCst);
+                    
                     let state = timer_state_clone.lock().await;
                     let work_mode = state.work_mode;
                     let next_reminder_at = state.next_reminder_at;
                     let interval_minutes = state.interval_minutes;
                     let rest_duration_seconds = state.rest_duration_seconds;
                     let big_tomato_rest_seconds = state.big_tomato_rest_seconds;
+                    let small_tomato_count = state.small_tomato_count;
                     drop(state);
+
+                    if is_paused_now {
+                        let _ = mi_next_rest.set_text("定时器已暂停");
+                        let _ = mi_big_rest.set_text("请点击恢复");
+                        continue;
+                    }
 
                     if let Some(target_time) = next_reminder_at {
                         let current = get_current_timestamp();
+                        
+                        // Menu Update Logic
+                        if current < target_time {
+                            let remaining = target_time - current;
+                            let mins = (remaining as f64 / 60.0).ceil() as u64;
+                            
+                            match work_mode {
+                                WorkMode::Working => {
+                                    if mins > 1 {
+                                        let _ = mi_next_rest.set_text(format!("下次小憩 大约 {} 分钟后", mins));
+                                    } else {
+                                        let _ = mi_next_rest.set_text("下次小憩 即将开始");
+                                    }
+                                    let remaining_small = 4 - small_tomato_count;
+                                    let _ = mi_big_rest.set_text(format!("下次长休 {} 次小憩后", remaining_small));
+                                },
+                                WorkMode::Resting => {
+                                    if mins > 1 {
+                                        let _ = mi_next_rest.set_text(format!("小憩中... 大约还要 {} 分钟", mins));
+                                    } else {
+                                        let _ = mi_next_rest.set_text(format!("小憩中... {} 秒后结束", remaining));
+                                    }
+                                    let remaining_small = 4 - small_tomato_count;
+                                    let _ = mi_big_rest.set_text(format!("下次长休 {} 次小憩后", remaining_small));
+                                },
+                                WorkMode::BigResting => {
+                                    if mins > 1 {
+                                        let _ = mi_next_rest.set_text(format!("长休中... 大约还要 {} 分钟", mins));
+                                    } else {
+                                        let _ = mi_next_rest.set_text(format!("长休中... {} 秒后结束", remaining));
+                                    }
+                                    let _ = mi_big_rest.set_text("长休结束后重新计数");
+                                }
+                            }
+                        }
+
                         if current >= target_time {
                             let mut state = timer_state_clone.lock().await;
 
@@ -423,10 +515,6 @@ async fn set_work_mode(app_handle: AppHandle) -> Result<(), String> {
     let window = app_handle.get_webview_window("main")
         .ok_or_else(|| "Failed to get main window".to_string())?;
 
-    // Make sure app behaves as normal foreground app with dock icon
-    #[cfg(target_os = "macos")]
-    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
-
     // Exit fullscreen first (must be done before unmaximize)
     match window.set_fullscreen(false) {
         Ok(_) => println!("[Rust] window.set_fullscreen(false) complete"),
@@ -439,7 +527,8 @@ async fn set_work_mode(app_handle: AppHandle) -> Result<(), String> {
         Err(e) => println!("[Rust] window.set_always_on_top(false) failed: {}", e),
     }
 
-    // Restore decorations (show window border)
+    // Restore decorations (show window border) - This crashes on macOS if done immediately after fullscreen exit
+    #[cfg(not(target_os = "macos"))]
     match window.set_decorations(true) {
         Ok(_) => println!("[Rust] window.set_decorations(true) complete"),
         Err(e) => println!("[Rust] window.set_decorations(true) failed: {}", e),
@@ -450,6 +539,24 @@ async fn set_work_mode(app_handle: AppHandle) -> Result<(), String> {
         Ok(_) => println!("[Rust] window.unmaximize() complete"),
         Err(e) => println!("[Rust] window.unmaximize() failed: {}", e),
     }
+
+    // Finally, hide the window and behave as an accessory app to disappear from dock
+    #[cfg(target_os = "macos")]
+    {
+        // On macOS, we spawn a tiny delay so the fullscreen exit animation/event loop can settle
+        // before we hide the window and change activation policy, which prevents NSException.
+        let app_handle_clone = app_handle.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            if let Some(win) = app_handle_clone.get_webview_window("main") {
+                let _ = win.hide();
+                let _ = app_handle_clone.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
+        });
+    }
+    
+    #[cfg(not(target_os = "macos"))]
+    let _ = window.hide();
 
     Ok(())
 }
