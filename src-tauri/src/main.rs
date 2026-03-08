@@ -25,9 +25,9 @@ use timer::{check_date_reset, TimerState, WorkMode};
 #[allow(unused_variables)]
 fn force_overlay(window: &tauri::WebviewWindow) {
     // 基础 Tauri 置顶和全屏
+    let _ = window.set_decorations(false); // 必须去掉边框才能真正"覆盖"
     let _ = window.set_always_on_top(true);
     let _ = window.set_fullscreen(true);
-    let _ = window.set_decorations(false); // 必须去掉边框才能真正"覆盖"
 
     // Windows 深度优化：取消任务栏占位
     #[cfg(target_os = "windows")]
@@ -492,6 +492,10 @@ async fn set_rest_mode(app_handle: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
 
+    // Force overlay BEFORE showing to prevent initial flash on macOS
+    force_overlay(&window);
+    println!("[Rust] force_overlay complete");
+
     // Show and focus the window first
     window.show().map_err(|e| e.to_string())?;
     println!("[Rust] window.show() complete");
@@ -499,10 +503,6 @@ async fn set_rest_mode(app_handle: AppHandle) -> Result<(), String> {
     println!("[Rust] window.unminimize() complete");
     window.set_focus().map_err(|e| e.to_string())?;
     println!("[Rust] window.set_focus() complete");
-
-    // Force overlay - this handles fullscreen, always on top, decorations, and macOS window level
-    force_overlay(&window);
-    println!("[Rust] force_overlay complete");
 
     Ok(())
 }
