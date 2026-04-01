@@ -340,6 +340,7 @@ pub fn run() {
                 RunEvent::ExitRequested { api, .. } => {
                     api.prevent_exit();
                 }
+                #[cfg(target_os = "macos")]
                 RunEvent::Reopen { .. } => {
                     // Handle macOS dock icon click
                     if let Some(window) = app_handle.get_webview_window("main") {
