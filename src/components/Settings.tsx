@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
-import { selectAudioFile, copyAudioFileByType, playSoundByType, pauseSound, isPlaying, stopSound, AudioType } from '../lib/tauriEvents';
+import { selectAudioFile, copyAudioFileByType, playSoundByType, stopAudioByRust, stopSound, AudioType } from '../lib/tauriEvents';
 
 interface SettingsProps {
   workMinutes: number;
@@ -89,22 +89,26 @@ function Settings({ workMinutes, restSeconds, bigRestSeconds, onSave }: Settings
   const handlePlayPause = async (audioType: AudioType, audioSet: boolean, soundEnabled: boolean) => {
     if (!soundEnabled) return;
 
-    if (isPlaying() && currentPlayingType === audioType) {
-      pauseSound();
+    // If this audio type is currently "playing" (tracked by frontend state), stop it
+    if (isAudioPlaying && currentPlayingType === audioType) {
+      // Stop Rust audio immediately
+      await stopAudioByRust();
+      stopSound(); // Clear frontend state
       setIsAudioPlaying(false);
+      setCurrentPlayingType(null);
     } else {
-      // Stop any currently playing audio
-      stopSound();
-      setIsAudioPlaying(false);
+      // Stop any currently playing audio (via Rust singleton - new play stops old)
+      await stopAudioByRust();
+      stopSound(); // Clear frontend state
 
       await playSoundByType(audioType, audioSet);
       setIsAudioPlaying(true);
       setCurrentPlayingType(audioType);
-      // Auto-reset button after audio ends (approximate)
+      // Auto-reset button after audio ends (approximate - Rust plays to completion)
       setTimeout(() => {
         setIsAudioPlaying(false);
         setCurrentPlayingType(null);
-      }, 3000);
+      }, 5000);
     }
   };
 

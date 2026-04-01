@@ -1,34 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { useSettingsStore } from '../stores/settingsStore';
-import { DEFAULT_INTERVAL_MINUTES, DEFAULT_REST_SECONDS, DEFAULT_BIG_REST_SECONDS } from '../lib/constants';
 
 describe('settingsStore', () => {
-  beforeEach(() => {
-    useSettingsStore.setState({
-      intervalMinutes: DEFAULT_INTERVAL_MINUTES,
-      restSeconds: DEFAULT_REST_SECONDS,
-      bigTomatoRestSeconds: DEFAULT_BIG_REST_SECONDS,
-      isPaused: false,
-      nextReminderSeconds: null,
-      workMode: 'working',
-      smallTomatoCount: 0,
-      bigTomatoCount: 0,
-      workSoundEnabled: true,
-      smallRestSoundEnabled: true,
-      bigRestSoundEnabled: true,
-      soundFilePath: null,
-      workAudioSet: false,
-      smallRestAudioSet: false,
-      bigRestAudioSet: false,
-      notification: null,
-    });
-  });
-
   it('initial state has correct default values', () => {
     const state = useSettingsStore.getState();
-    expect(state.intervalMinutes).toBe(DEFAULT_INTERVAL_MINUTES);
-    expect(state.restSeconds).toBe(DEFAULT_REST_SECONDS);
-    expect(state.bigTomatoRestSeconds).toBe(DEFAULT_BIG_REST_SECONDS);
+    expect(state.intervalMinutes).toBe(20);
+    expect(state.restSeconds).toBe(20);
+    expect(state.bigTomatoRestSeconds).toBe(900);
     expect(state.isPaused).toBe(false);
     expect(state.workMode).toBe('working');
     expect(state.workSoundEnabled).toBe(true);

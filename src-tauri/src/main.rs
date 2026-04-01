@@ -7,6 +7,7 @@ fn main() {
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -14,12 +15,47 @@ use tauri::{
     AppHandle, Emitter, Manager, RunEvent,
 };
 
-use tokio::sync::Mutex;
+use tokio::sync::Mutex as TokioMutex;
 use tokio::time::interval;
 
 mod timer;
 
 use timer::{check_date_reset, TimerState, WorkMode};
+
+/// Initialize default audio files from bundled resources to app data directory
+fn init_default_audio(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let app_dir = app.path().app_data_dir()?;
+    let audio_dir = app_dir.join("audio");
+
+    // Create audio directory if it doesn't exist
+    if !audio_dir.exists() {
+        fs::create_dir_all(&audio_dir)?;
+    }
+
+    // List of audio files to initialize
+    let audio_files = ["work.mp3", "small_rest.mp3", "big_rest.mp3"];
+
+    // Try to get resource directory (where bundled resources are stored)
+    let resource_dir = app.path().resource_dir().ok();
+
+    for filename in &audio_files {
+        let target_path = audio_dir.join(filename);
+        // Only copy if the file doesn't already exist in app data dir
+        if !target_path.exists() {
+            if let Some(res_dir) = &resource_dir {
+                let source_path = res_dir.join("audio").join(filename);
+                if source_path.exists() {
+                    fs::copy(&source_path, &target_path)?;
+                    println!("[Audio] Copied default audio: {}", filename);
+                } else {
+                    println!("[Audio] Source audio not found: {}", source_path.display());
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
 
 /// 强制窗口置顶并全屏的跨平台函数
 #[allow(unused_variables)]
@@ -66,7 +102,7 @@ fn toggle_window_visibility(window: &tauri::WebviewWindow) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let timer_state = Arc::new(Mutex::new(TimerState::default()));
+    let timer_state = Arc::new(TokioMutex::new(TimerState::default()));
     let is_paused = Arc::new(AtomicBool::new(false));
 
     // Initialize next_reminder_at
@@ -83,6 +119,11 @@ pub fn run() {
         .manage(timer_state.clone())
         .manage(is_paused.clone())
         .setup(move |app| {
+            // Initialize default audio files from bundled resources
+            if let Err(e) = init_default_audio(app) {
+                eprintln!("[Audio] Failed to initialize default audio: {}", e);
+            }
+
             // Create Dynamic Menu Items
             let status_next_rest = MenuItem::with_id(app, "status_next_rest", "下次小憩 计算中...", false, None::<&str>)?;
             let status_big_rest = MenuItem::with_id(app, "status_big_rest", "下次休息 计算中...", false, None::<&str>)?;
@@ -331,7 +372,9 @@ pub fn run() {
             get_big_tomato_rest_duration,
             get_tomato_counts,
             get_audio_base64_by_type,
-            check_audio_exists
+            check_audio_exists,
+            play_audio_by_type,
+            stop_audio
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -355,7 +398,7 @@ pub fn run() {
 #[tauri::command]
 async fn set_interval(
     minutes: f64,
-    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+    state: tauri::State<'_, Arc<TokioMutex<TimerState>>>,
 ) -> Result<(), String> {
     let mut timer_state = state.lock().await;
     timer_state.interval_minutes = minutes;
@@ -369,7 +412,7 @@ async fn set_interval(
 #[tauri::command]
 async fn set_rest_duration(
     seconds: u64,
-    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+    state: tauri::State<'_, Arc<TokioMutex<TimerState>>>,
 ) -> Result<(), String> {
     let mut timer_state = state.lock().await;
     timer_state.rest_duration_seconds = seconds;
@@ -379,7 +422,7 @@ async fn set_rest_duration(
 #[tauri::command]
 async fn set_big_tomato_rest_duration(
     seconds: u64,
-    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+    state: tauri::State<'_, Arc<TokioMutex<TimerState>>>,
 ) -> Result<(), String> {
     let mut timer_state = state.lock().await;
     timer_state.big_tomato_rest_seconds = seconds;
@@ -387,25 +430,25 @@ async fn set_big_tomato_rest_duration(
 }
 
 #[tauri::command]
-async fn get_interval(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<f64, String> {
+async fn get_interval(state: tauri::State<'_, Arc<TokioMutex<TimerState>>>) -> Result<f64, String> {
     let timer_state = state.lock().await;
     Ok(timer_state.interval_minutes)
 }
 
 #[tauri::command]
-async fn get_rest_duration(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<u64, String> {
+async fn get_rest_duration(state: tauri::State<'_, Arc<TokioMutex<TimerState>>>) -> Result<u64, String> {
     let timer_state = state.lock().await;
     Ok(timer_state.rest_duration_seconds)
 }
 
 #[tauri::command]
-async fn get_big_tomato_rest_duration(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<u64, String> {
+async fn get_big_tomato_rest_duration(state: tauri::State<'_, Arc<TokioMutex<TimerState>>>) -> Result<u64, String> {
     let timer_state = state.lock().await;
     Ok(timer_state.big_tomato_rest_seconds)
 }
 
 #[tauri::command]
-async fn get_tomato_counts(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<(u32, u32), String> {
+async fn get_tomato_counts(state: tauri::State<'_, Arc<TokioMutex<TimerState>>>) -> Result<(u32, u32), String> {
     let timer_state = state.lock().await;
     // Check date reset first
     let mut state_mut = timer_state.clone();
@@ -415,7 +458,7 @@ async fn get_tomato_counts(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> R
 
 #[tauri::command]
 async fn get_next_reminder_seconds(
-    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+    state: tauri::State<'_, Arc<TokioMutex<TimerState>>>,
     is_paused: tauri::State<'_, Arc<AtomicBool>>,
 ) -> Result<Option<u64>, String> {
     if is_paused.load(Ordering::SeqCst) {
@@ -436,7 +479,7 @@ async fn get_next_reminder_seconds(
 }
 
 #[tauri::command]
-async fn get_work_mode(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Result<String, String> {
+async fn get_work_mode(state: tauri::State<'_, Arc<TokioMutex<TimerState>>>) -> Result<String, String> {
     let timer_state = state.lock().await;
     match timer_state.work_mode {
         WorkMode::Working => Ok("working".to_string()),
@@ -448,7 +491,7 @@ async fn get_work_mode(state: tauri::State<'_, Arc<Mutex<TimerState>>>) -> Resul
 #[tauri::command]
 async fn skip_reminder(
     app: AppHandle,
-    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+    state: tauri::State<'_, Arc<TokioMutex<TimerState>>>,
 ) -> Result<(), String> {
     // Reset the timer by emitting a skipped event
     let _ = app.emit("reminder-skipped", ());
@@ -464,7 +507,7 @@ async fn skip_reminder(
 async fn snooze_reminder(
     app: AppHandle,
     minutes: u64,
-    state: tauri::State<'_, Arc<Mutex<TimerState>>>,
+    state: tauri::State<'_, Arc<TokioMutex<TimerState>>>,
 ) -> Result<(), String> {
     // Emit snooze event with duration
     let _ = app.emit("reminder-snoozed", minutes);
@@ -627,4 +670,201 @@ async fn get_audio_base64_by_type(app: AppHandle, audio_type: String) -> Result<
 
     // Return data URL format
     Ok(format!("data:{};base64,{}", mime_type, base64_data))
+}
+
+// ==================== Audio Thread Management ====================
+
+use std::sync::mpsc::Sender;
+use std::thread;
+use std::sync::Mutex as StdMutex;
+
+static mut AUDIO_TX: Option<Sender<AudioAction>> = None;
+static AUDIO_TX_INIT: std::sync::Once = std::sync::Once::new();
+enum AudioAction {
+    Play(String),
+    Stop,
+}
+
+/// Initialize the audio thread for singleton playback
+fn init_audio_thread() {
+    unsafe {
+        AUDIO_TX_INIT.call_once(|| {
+            let (tx, rx) = mpsc::channel::<AudioAction>();
+            AUDIO_TX = Some(tx);
+
+            thread::spawn(move || {
+                let (_stream, stream_handle) = match rodio::OutputStream::try_default() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[Audio] Failed to create output stream: {}", e);
+                        return;
+                    }
+                };
+
+                // Single sink for singleton playback - stored in mutex
+                let sink = Arc::new(StdMutex::new(None::<rodio::Sink>));
+
+                loop {
+                    match rx.recv() {
+                        Ok(AudioAction::Play(audio_path)) => {
+                            // Stop any existing playback first
+                            {
+                                let mut sink_guard = sink.lock().unwrap();
+                                if let Some(existing) = sink_guard.as_mut() {
+                                    existing.stop();
+                                }
+                                *sink_guard = None;
+                            }
+
+                            let file = match std::fs::File::open(&audio_path) {
+                                Ok(f) => f,
+                                Err(e) => {
+                                    eprintln!("[Audio] Failed to open file: {}", e);
+                                    continue;
+                                }
+                            };
+
+                            let new_sink = match rodio::Sink::try_new(&stream_handle) {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    eprintln!("[Audio] Failed to create sink: {}", e);
+                                    continue;
+                                }
+                            };
+
+                            // Store the sink before playing
+                            {
+                                let mut sink_guard = sink.lock().unwrap();
+                                *sink_guard = Some(new_sink);
+                            }
+
+                            match rodio::Decoder::new(file) {
+                                Ok(source) => {
+                                    // Append source first
+                                    {
+                                        let mut sink_guard = sink.lock().unwrap();
+                                        if let Some(s) = sink_guard.as_mut() {
+                                            s.append(source);
+                                        }
+                                    }
+
+                                    // Non-blocking wait loop that can respond to stop commands
+                                    loop {
+                                        // Sleep briefly to avoid busy-waiting
+                                        thread::sleep(std::time::Duration::from_millis(30));
+
+                                        // Check if stop was requested via channel
+                                        match rx.try_recv() {
+                                            Ok(AudioAction::Stop) => {
+                                                let mut sink_guard = sink.lock().unwrap();
+                                                if let Some(s) = sink_guard.as_mut() {
+                                                    s.stop();
+                                                }
+                                                *sink_guard = None;
+                                                break;
+                                            }
+                                            Ok(_) => {
+                                                // Other message, keep playing
+                                            }
+                                            Err(mpsc::TryRecvError::Empty) => {
+                                                // No message, check if still playing
+                                            }
+                                            Err(_) => {
+                                                // Channel closed, exit thread
+                                                return;
+                                            }
+                                        }
+
+                                        // Check if playback finished
+                                        let empty = {
+                                            let mut sink_guard = sink.lock().unwrap();
+                                            if let Some(s) = sink_guard.as_mut() {
+                                                s.empty()
+                                            } else {
+                                                true
+                                            }
+                                        };
+
+                                        if empty {
+                                            break;
+                                        }
+                                    }
+
+                                    // Clear sink after playback ends
+                                    {
+                                        let mut sink_guard = sink.lock().unwrap();
+                                        *sink_guard = None;
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("[Audio] Failed to decode: {}", e);
+                                }
+                            }
+
+                            // Clear sink after playback ends
+                            {
+                                let mut sink_guard = sink.lock().unwrap();
+                                *sink_guard = None;
+                            }
+                        }
+                        Ok(AudioAction::Stop) => {
+                            // Stop current playback
+                            let mut sink_guard = sink.lock().unwrap();
+                            if let Some(s) = sink_guard.as_mut() {
+                                s.stop();
+                            }
+                            *sink_guard = None;
+                        }
+                        Err(_) => {
+                            // Channel closed, exit thread
+                            break;
+                        }
+                    }
+                }
+            });
+        });
+    }
+}
+
+/// Send action command to audio thread
+fn send_audio_action(action: AudioAction) {
+    unsafe {
+        if let Some(ref tx) = AUDIO_TX {
+            let _ = tx.send(action);
+        }
+    }
+}
+
+/// Play audio file using rodio (Rust backend) - singleton mode
+#[tauri::command]
+fn play_audio_by_type(app: AppHandle, audio_type: String) -> Result<(), String> {
+    init_audio_thread();
+
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    let filename = match audio_type.as_str() {
+        "work" => "work.mp3",
+        "small_rest" => "small_rest.mp3",
+        "big_rest" => "big_rest.mp3",
+        "rest" => "rest.mp3",
+        _ => return Err("Invalid audio type".to_string()),
+    };
+
+    let audio_path = app_dir.join("audio").join(filename);
+
+    if !audio_path.exists() {
+        return Err("Audio file not found".to_string());
+    }
+
+    send_audio_action(AudioAction::Play(audio_path.to_str().unwrap_or("").to_string()));
+
+    Ok(())
+}
+
+/// Stop currently playing audio
+#[tauri::command]
+fn stop_audio() -> Result<(), String> {
+    init_audio_thread();
+    send_audio_action(AudioAction::Stop);
+    Ok(())
 }

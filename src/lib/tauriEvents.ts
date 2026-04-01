@@ -235,7 +235,7 @@ export async function getAudioBase64ByType(audioType: AudioType): Promise<string
   }
 }
 
-/// Play sound by type
+/// Play sound by type using Rust backend
 export async function playSoundByType(audioType: AudioType, customAudio: boolean): Promise<void> {
   // If custom audio is not set, play default sound
   if (!customAudio) {
@@ -244,39 +244,11 @@ export async function playSoundByType(audioType: AudioType, customAudio: boolean
   }
 
   try {
-    const audioDataUrl = await getAudioBase64ByType(audioType);
-    if (!audioDataUrl) {
-      console.log(`[tauriEvents] No custom audio set for ${audioType}, playing default sound`);
-      playDefaultSound();
-      return;
-    }
-
-    // Stop current audio if playing
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio = null;
-    }
-
-    const audio = new Audio(audioDataUrl);
-    currentAudio = audio;
-
-    audio.onended = () => {
-      currentAudio = null;
-      if (onAudioEnded) {
-        onAudioEnded();
-        onAudioEnded = null;
-      }
-    };
-
-    audio.onerror = () => {
-      console.error('[tauriEvents] Audio error, playing default sound');
-      currentAudio = null;
-      playDefaultSound();
-    };
-
-    await audio.play();
+    // Use Rust backend to play audio
+    await invoke('play_audio_by_type', { audioType });
   } catch (error) {
-    console.error('[tauriEvents] Failed to play sound:', error);
+    console.error('[tauriEvents] Failed to play sound via Rust:', error);
+    // Fallback to default sound if Rust playback fails
     playDefaultSound();
   }
 }
@@ -358,11 +330,20 @@ export function isPlaying(): boolean {
   return currentAudio !== null && !currentAudio.paused;
 }
 
-/// Stop current audio
+/// Stop current audio (frontend HTMLAudioElement)
 export function stopSound(): void {
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.currentTime = 0;
     currentAudio = null;
+  }
+}
+
+/// Stop audio via Rust backend (for custom audio playback)
+export async function stopAudioByRust(): Promise<void> {
+  try {
+    await invoke('stop_audio');
+  } catch (error) {
+    console.error('[tauriEvents] Failed to stop Rust audio:', error);
   }
 }

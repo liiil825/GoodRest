@@ -134,6 +134,25 @@ mod tests {
     }
 
     #[test]
+    fn test_check_date_reset_different_day() {
+        let mut state = TimerState::default();
+        state.small_tomato_count = 10;
+        state.big_tomato_count = 3;
+
+        // Simulate yesterday's date
+        state.last_date = "2020-01-01".to_string();
+
+        check_date_reset(&mut state);
+
+        // Count should reset on new day
+        assert_eq!(state.small_tomato_count, 0);
+        assert_eq!(state.big_tomato_count, 0);
+        // last_date should be updated
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        assert_eq!(state.last_date, today);
+    }
+
+    #[test]
     fn test_big_tomato_rest_duration_default() {
         let state = TimerState::default();
         // Default is 15 minutes = 900 seconds
@@ -159,5 +178,89 @@ mod tests {
         // Transition to big resting
         state.work_mode = WorkMode::BigResting;
         assert_eq!(state.work_mode, WorkMode::BigResting);
+    }
+
+    #[test]
+    fn test_interval_minutes_can_be_updated() {
+        let mut state = TimerState::default();
+        assert_eq!(state.interval_minutes, 20.0);
+
+        state.interval_minutes = 30.0;
+        assert_eq!(state.interval_minutes, 30.0);
+    }
+
+    #[test]
+    fn test_rest_duration_can_be_updated() {
+        let mut state = TimerState::default();
+        assert_eq!(state.rest_duration_seconds, 20);
+
+        state.rest_duration_seconds = 60;
+        assert_eq!(state.rest_duration_seconds, 60);
+    }
+
+    #[test]
+    fn test_next_reminder_at_can_be_set() {
+        let mut state = TimerState::default();
+        assert_eq!(state.next_reminder_at, None);
+
+        state.next_reminder_at = Some(1234567890);
+        assert_eq!(state.next_reminder_at, Some(1234567890));
+
+        state.next_reminder_at = None;
+        assert_eq!(state.next_reminder_at, None);
+    }
+
+    #[test]
+    fn test_small_tomato_count_threshold() {
+        // Test the 4-tomato threshold for big rest
+        let mut state = TimerState::default();
+
+        for i in 1..=3 {
+            state.small_tomato_count = i;
+            let is_big_rest = state.small_tomato_count >= 4;
+            assert!(!is_big_rest, "Should not trigger big rest at count {}", i);
+        }
+
+        state.small_tomato_count = 4;
+        let is_big_rest = state.small_tomato_count >= 4;
+        assert!(is_big_rest, "Should trigger big rest at count 4");
+    }
+
+    #[test]
+    fn test_big_tomato_count_accumulates() {
+        let mut state = TimerState::default();
+
+        // Simulate completing 3 big rests
+        state.big_tomato_count = 3;
+        state.big_tomato_count += 1;
+        assert_eq!(state.big_tomato_count, 4);
+    }
+
+    #[test]
+    fn test_state_serialization() {
+        // Test that TimerState can be serialized (used by tauri state management)
+        let state = TimerState::default();
+        let json = serde_json::to_string(&state);
+        assert!(json.is_ok());
+
+        let deserialized: TimerState = serde_json::from_str(&json.unwrap()).unwrap();
+        assert_eq!(deserialized.interval_minutes, state.interval_minutes);
+        assert_eq!(deserialized.work_mode, state.work_mode);
+    }
+
+    #[test]
+    fn test_work_mode_serialization() {
+        // Test that WorkMode can be serialized
+        let modes = vec![
+            WorkMode::Working,
+            WorkMode::Resting,
+            WorkMode::BigResting,
+        ];
+
+        for mode in modes {
+            let json = serde_json::to_string(&mode).unwrap();
+            let deserialized: WorkMode = serde_json::from_str(&json).unwrap();
+            assert_eq!(mode, deserialized);
+        }
     }
 }
